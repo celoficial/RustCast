@@ -13,7 +13,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Self {
-        dotenv().ok();
+        dotenv().expect("Erro ao carregar o Arquivo .env");
 
         Config {
             http_port: env::var("HTTP_PORT")
@@ -29,7 +29,7 @@ impl Config {
                 .parse()
                 .expect("MULTICAST_PORT must be a valid number"),
             media_directory: env::var("MEDIA_DIRECTORY")
-                .unwrap_or_else(|_| "C:/Users/celof/Desktop/media".to_string()),
+                .unwrap_or_else(|_| "./media".to_string())
         }
     }
 }

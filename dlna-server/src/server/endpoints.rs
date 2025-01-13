@@ -19,12 +19,12 @@ pub async fn handle_request(
                                     </specVersion>
                                     <device>
                                         <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
-                                        <friendlyName>Rust DLNA Server</friendlyName>
-                                        <manufacturer>Rust Inc.</manufacturer>
-                                        <manufacturerURL>http://www.rust-dlna.com</manufacturerURL>
+                                        <friendlyName>RustCast Server</friendlyName>
+                                        <manufacturer>Understake</manufacturer>
+                                        <manufacturerURL>https://github.com/celoficial</manufacturerURL>
                                         <modelName>DLNA Server v1</modelName>
                                         <modelDescription>A Rust-based DLNA Media Server</modelDescription>
-                                        <modelURL>http://www.rust-dlna.com/models/server</modelURL>
+                                        <modelURL>https://github.com/celoficial/RustCast</modelURL>
                                         <UDN>uuid:12345678-1234-1234-1234-123456789abc</UDN>
                                     </device>
                                 </root>"#;
@@ -36,7 +36,7 @@ pub async fn handle_request(
             let json = json!(media_files); // Converte a lista de arquivos em JSON
             Ok(Response::new(Body::from(json.to_string())))
         }
-        
+
         _ => Ok(Response::builder()
             .status(404)
             .body(Body::from("Not Found"))
