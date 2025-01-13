@@ -1,5 +1,6 @@
 use hyper::{Body, Client, Method, Request};
 use std::path::Path;
+use crate::config::Config;
 
 use super::manager::MediaFile;
 
@@ -55,7 +56,9 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
 
     let client = Client::new();
 
-    let current_uri = format!("http://192.168.0.97:8080/media/{}", media_file.name); //TODO: Mudar para o IP e porta do servidor http no .env
+    let config = Config::from_env();
+
+    let current_uri = format!("http://{}:{}/media/{}", config.http_address, config.http_port, media_file.name);
 
     let soap_body = format!(
         r#"

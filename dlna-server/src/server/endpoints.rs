@@ -74,17 +74,18 @@ fn handle_media_file_request(
             _ => "application/octet-stream",
         };
 
-        println!("Arquivo encontrado: {:?}", file_path);
         // Envia o arquivo como resposta
         match fs::read(&file_path) {
-            Ok(content) => Ok(Response::builder()
+            Ok(content) => {
+                Ok(Response::builder()
                 .header("Content-Type", mime_type)
                 .header(
                     "Content-Disposition",
                     format!("inline; filename=\"{}\"", media_name),
                 )
                 .body(Body::from(content))
-                .unwrap()),
+                .unwrap())
+            },
             Err(_) => respond_internal_server_error("Erro ao ler o arquivo"),
         }
     } else {
