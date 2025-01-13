@@ -1,7 +1,9 @@
+use std::path::Path;
+use std::io::stdin;
+
 mod config;
 mod discovery;
 mod server;
-mod utils;
 mod media;
 
 use config::Config;
@@ -9,7 +11,7 @@ use discovery::discovery::discover_ssdp;
 use discovery::device::fetch_device_description;
 use server::http_server::start_http_server;
 use media::manager::list_media_files;
-use std::path::Path;
+use media::stream::stream_media;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,25 +61,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Pergunta ao usuário qual dispositivo ele quer usar
                 println!("\nEscolha um dispositivo pelo número (ou digite '0' para sair):");
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input)?;
-                let choice: usize = input.trim().parse().unwrap_or(0);
+                // let mut input = String::new();
+                // stdin().read_line(&mut input)?;
+                // let choice: usize = input.trim().parse().unwrap_or(0);
 
-                if choice == 0 {
+                // if choice == 0 {
+                //     println!("Saindo...");
+                //     return Ok(());
+                // }
+
+                // if let Some(selected_device) = devices.get(choice - 1) {
+                //     if let Some(location) = selected_device.get("LOCATION") {
+                //         println!("Você selecionou o dispositivo com LOCATION: {}", location);
+                //         fetch_device_description(location).await?;
+                //     } else {
+                //         println!("Dispositivo selecionado não possui LOCATION.");
+                //     }
+                // } else {
+                //     println!("Dispositivo inválido.");
+                // }
+
+                let mut input = String::new();
+                stdin().read_line(&mut input)?;
+                let device_choice: usize = input.trim().parse().unwrap_or(0);
+
+                if device_choice == 0 {
                     println!("Saindo...");
                     return Ok(());
                 }
 
-                if let Some(selected_device) = devices.get(choice - 1) {
-                    if let Some(location) = selected_device.get("LOCATION") {
-                        println!("Você selecionou o dispositivo com LOCATION: {}", location);
-                        fetch_device_description(location).await?;
-                    } else {
-                        println!("Dispositivo selecionado não possui LOCATION.");
-                    }
+                let selected_device = devices
+                    .get(device_choice - 1)
+                    .and_then(|device| device.get("LOCATION"))
+                    .ok_or("Dispositivo inválido ou sem LOCATION.")?;
+
+                // Obtém a descrição do dispositivo selecionado
+                println!("Obtendo descrição do dispositivo...");
+                if let Err(e) = fetch_device_description(selected_device).await {
+                    eprintln!("Erro ao obter a descrição do dispositivo: {}", e);
                 } else {
-                    println!("Dispositivo inválido.");
+                    println!("Descrição do dispositivo obtida com sucesso.");
                 }
+
+                println!("Você selecionou o dispositivo: {}", selected_device);
+
+                // Pergunta ao usuário qual arquivo de mídia deseja transmitir
+                println!("\nEscolha um arquivo de mídia pelo número (ou digite '0' para sair):");
+                input.clear();
+                stdin().read_line(&mut input)?;
+                let media_choice: usize = input.trim().parse().unwrap_or(0);
+
+                if media_choice == 0 {
+                    println!("Saindo...");
+                    return Ok(());
+                }
+
+                let selected_media = media_files
+                .get(media_choice - 1)
+                .ok_or("Arquivo de mídia inválido.")?;
+
+                println!("Você selecionou o arquivo de mídia: {}", selected_media.name);
+
+                // Inicia o streaming para o dispositivo DLNA
+                println!("Iniciando a transmissão para o dispositivo: {}", selected_device);
+                stream_media(selected_device, selected_media).await?;
+
+                println!("Transmissão concluída com sucesso!");
             }
         }
         Err(e) => {
@@ -85,7 +134,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Aguarda o término do programa (Ctrl+C para finalizar)
+    tokio::signal::ctrl_c().await?;
+    println!("Encerrando o servidor HTTP...");
+
+    // Cancela a tarefa do servidor HTTP
+    //server_task.abort();
+
     Ok(())
 }
-
 

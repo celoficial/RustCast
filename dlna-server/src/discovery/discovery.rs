@@ -26,7 +26,7 @@ pub async fn discover_ssdp(multicast_addr: &str, multicast_port: u16) -> Result<
     let mut buf = [0u8; 1024];
 
     let start_time = Instant::now();
-    let timeout_duration = Duration::from_secs(10);
+    let timeout_duration = Duration::from_secs(5);
 
     // Loop de recebimento com timeout global
     while start_time.elapsed() < timeout_duration {
@@ -65,7 +65,5 @@ pub async fn discover_ssdp(multicast_addr: &str, multicast_port: u16) -> Result<
             }
         }
     }
-
-    println!("Saindo da função discover_ssdp.");
     Ok(devices)
 }
