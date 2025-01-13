@@ -1,0 +1,12 @@
+[package]
+name = "dlna-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }
+reqwest = { version = "0.11" }
+dotenvy = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+serde-xml-rs = "0.5"
