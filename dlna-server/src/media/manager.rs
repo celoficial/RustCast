@@ -16,7 +16,6 @@ pub fn list_media_files(directory: &str) -> Vec<MediaFile> {
                 let path = entry.path();
                 if path.is_file() {
                     if let Some(ext) = path.extension() {
-                        println!("Arquivo encontrado: {:?}", path);
                         if is_supported_format(ext.to_str().unwrap_or_default()) {
                             media_files.push(MediaFile {
                                 name: path.file_name().unwrap().to_string_lossy().to_string(),

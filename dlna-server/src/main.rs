@@ -24,17 +24,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Diretório de mídia inválido".into());
     }
 
-    // Lista os arquivos de mídia
-    let media_files = list_media_files(&config.media_directory);
-    if media_files.is_empty() {
-        println!("Nenhum arquivo de mídia encontrado no diretório: {}", config.media_directory);
-    } else {
-        println!("Arquivos de mídia encontrados:");
-        for file in &media_files {
-            println!("- {}", file.name);
-        }
-    }
-
     // Clona a configuração para uso no servidor HTTP
     let server_config = config.clone();
 
@@ -61,25 +50,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Pergunta ao usuário qual dispositivo ele quer usar
                 println!("\nEscolha um dispositivo pelo número (ou digite '0' para sair):");
-                // let mut input = String::new();
-                // stdin().read_line(&mut input)?;
-                // let choice: usize = input.trim().parse().unwrap_or(0);
-
-                // if choice == 0 {
-                //     println!("Saindo...");
-                //     return Ok(());
-                // }
-
-                // if let Some(selected_device) = devices.get(choice - 1) {
-                //     if let Some(location) = selected_device.get("LOCATION") {
-                //         println!("Você selecionou o dispositivo com LOCATION: {}", location);
-                //         fetch_device_description(location).await?;
-                //     } else {
-                //         println!("Dispositivo selecionado não possui LOCATION.");
-                //     }
-                // } else {
-                //     println!("Dispositivo inválido.");
-                // }
 
                 let mut input = String::new();
                 stdin().read_line(&mut input)?;
@@ -105,8 +75,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 println!("Você selecionou o dispositivo: {}", selected_device);
 
+                // Lista os arquivos de mídia
+                let media_files = list_media_files(&config.media_directory);
+
                 // Pergunta ao usuário qual arquivo de mídia deseja transmitir
                 println!("\nEscolha um arquivo de mídia pelo número (ou digite '0' para sair):");
+                
+                if media_files.is_empty() {
+                    println!("Nenhum arquivo de mídia encontrado no diretório: {}", config.media_directory);
+                } else {
+                    println!("Arquivos de mídia encontrados:");
+                    for (i ,file) in media_files.iter().enumerate() {
+                        println!("{}- {}", i+1 ,file.name);
+                    }
+                }
+
                 input.clear();
                 stdin().read_line(&mut input)?;
                 let media_choice: usize = input.trim().parse().unwrap_or(0);
