@@ -2,11 +2,13 @@
 use dotenvy::dotenv;
 use std::env;
 
+#[derive(Clone)]
 pub struct Config {
     pub http_port: u16,
     pub friendly_name: String,
     pub multicast_address: String,
     pub multicast_port: u16,
+    pub media_directory: String,
 }
 
 impl Config {
@@ -26,6 +28,8 @@ impl Config {
                 .unwrap_or_else(|_| "1900".to_string())
                 .parse()
                 .expect("MULTICAST_PORT must be a valid number"),
+            media_directory: env::var("MEDIA_DIRECTORY")
+                .unwrap_or_else(|_| "C:/Users/celof/Desktop/media".to_string()),
         }
     }
 }

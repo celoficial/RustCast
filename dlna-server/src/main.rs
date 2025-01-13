@@ -1,22 +1,45 @@
-// src/main.rs
 mod config;
 mod discovery;
 mod server;
 mod utils;
+mod media;
 
 use config::Config;
 use discovery::discovery::discover_ssdp;
 use discovery::device::fetch_device_description;
-use server::start_http_server;
+use server::http_server::start_http_server;
+use media::manager::list_media_files;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env();
     println!("Iniciando o servidor DLNA: {}", config.friendly_name);
 
+    // Verifica se o diretório de mídia existe
+    if !Path::new(&config.media_directory).exists() {
+        eprintln!("Erro: O diretório de mídia configurado '{}' não existe.", config.media_directory);
+        return Err("Diretório de mídia inválido".into());
+    }
+
+    // Lista os arquivos de mídia
+    let media_files = list_media_files(&config.media_directory);
+    if media_files.is_empty() {
+        println!("Nenhum arquivo de mídia encontrado no diretório: {}", config.media_directory);
+    } else {
+        println!("Arquivos de mídia encontrados:");
+        for file in &media_files {
+            println!("- {}", file.name);
+        }
+    }
+
+    // Clona a configuração para uso no servidor HTTP
+    let server_config = config.clone();
+
     // Inicia o servidor HTTP em uma thread separada
     tokio::spawn(async move {
-        start_http_server(config.http_port).await;
+        println!("Iniciando servidor HTTP na porta: {}", server_config.http_port);
+        start_http_server(server_config.http_port, server_config).await;
     });
 
     // Chama a função de descoberta de dispositivos
@@ -64,4 +87,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
 
