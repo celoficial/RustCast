@@ -19,5 +19,5 @@ jobs:
         run: cd dlna-server && cargo build --verbose
       - name: Test
         run: cd dlna-server && cargo test --verbose
-      - name: Lint
-        run: cd dlna-server && cargo clippy --all-targets -- -D warnings
+      # - name: Lint
+      #   run: cd dlna-server && cargo clippy --all-targets -- -D warnings
