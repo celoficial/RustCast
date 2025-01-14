@@ -15,12 +15,12 @@ pub async fn discover_ssdp(multicast_addr: &str, multicast_port: u16) -> Result<
 
     let socket = UdpSocket::bind("192.168.0.97:0").await?;
     socket.set_multicast_ttl_v4(4)?;
-    println!("Socket UDP criado na porta local: {:?}", socket.local_addr());
+    println!("UDP socket created on local port: {:?}", socket.local_addr());
 
-    // Envia a mensagem M-SEARCH
-    println!("Enviando solicitação SSDP para {multicast_address}...");
+    // Sends the M-SEARCH message
+    println!("Sending SSDP request to {multicast_address}...");
     socket.send_to(m_search.as_bytes(), &multicast_address).await?;
-    println!("Solicitação SSDP enviada com sucesso!");
+    println!("SSDP request sent successfully!");
 
     let mut devices: Vec<HashMap<String, String>> = Vec::new();
     let mut buf = [0u8; 1024];
@@ -28,13 +28,12 @@ pub async fn discover_ssdp(multicast_addr: &str, multicast_port: u16) -> Result<
     let start_time = Instant::now();
     let timeout_duration = Duration::from_secs(5);
 
-    // Loop de recebimento com timeout global
+    // Receive loop with global timeout
     while start_time.elapsed() < timeout_duration {
-        // Timeout para cada operação de recebimento
+        // Timeout for each receive operation
         match timeout(Duration::from_secs(1), socket.recv_from(&mut buf)).await {
-            Ok(Ok((len, addr))) => {
+            Ok(Ok((len, _))) => {
                 let response = String::from_utf8_lossy(&buf[..len]);
-                println!("Resposta SSDP recebida de {} com {} bytes", addr, len);
 
                 if response.contains("urn:schemas-upnp-org:device:MediaRenderer:1") {
                     let mut device_info = HashMap::new();
@@ -52,16 +51,14 @@ pub async fn discover_ssdp(multicast_addr: &str, multicast_port: u16) -> Result<
                     }
 
                     if !devices.iter().any(|d| d.get("USN") == device_info.get("USN")) {
-                        println!("Novo dispositivo encontrado: {:?}", device_info);
+                        println!("New device found: {:?}", device_info);
                         devices.push(device_info);
                     }
                 }
             }
-            Ok(Err(e)) => {
-                println!("Erro ao receber resposta SSDP: {}", e);
+            Ok(Err(_)) => {
             }
             Err(_) => {
-                println!("Timeout ao esperar por respostas SSDP.");
             }
         }
     }

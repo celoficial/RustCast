@@ -16,78 +16,75 @@ use media::stream::stream_media;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env();
-    println!("Iniciando o servidor DLNA: {}", config.friendly_name);
+    println!("Starting the {} server", config.friendly_name);
 
-    // Verifica se o diretório de mídia existe
+    // Checks if the media directory exists
     if !Path::new(&config.media_directory).exists() {
-        eprintln!("Erro: O diretório de mídia configurado '{}' não existe.", config.media_directory);
-        return Err("Diretório de mídia inválido".into());
+        eprintln!("Error: The configured media directory '{}' does not exist.", config.media_directory);
+        return Err("Invalid media directory".into());        
     }
 
-    // Clona a configuração para uso no servidor HTTP
+    // Clones the configuration for use in the HTTP server
     let server_config = config.clone();
 
-    // Inicia o servidor HTTP em uma thread separada
+    // Starts the HTTP server in a separate thread
     tokio::spawn(async move {
-        println!("Iniciando servidor HTTP na porta: {}", server_config.http_port);
         start_http_server(server_config.http_port, server_config).await;
     });
 
-    // Chama a função de descoberta de dispositivos
+    // Calls the device discovery function
     match discover_ssdp(&config.multicast_address, config.multicast_port).await {
         Ok(devices) => {
             if devices.is_empty() {
-                println!("Nenhum dispositivo encontrado.");
+                println!("No devices found.");
             } else {
-                println!("\nDispositivos MediaRenderer encontrados:");
+                println!("\nMediaRenderer devices found:");
                 for (i, device) in devices.iter().enumerate() {
                     if let Some(location) = device.get("LOCATION") {
                         println!("{}) {}", i + 1, location);
                     } else {
-                        println!("{}) Dispositivo sem LOCATION.", i + 1);
+                        println!("{}) Device without LOCATION.", i + 1);
                     }
                 }
 
-                // Pergunta ao usuário qual dispositivo ele quer usar
-                println!("\nEscolha um dispositivo pelo número (ou digite '0' para sair):");
+                // Asks the user which device they want to use
+                println!("\nChoose a device by number (or type '0' to exit):");
 
                 let mut input = String::new();
                 stdin().read_line(&mut input)?;
                 let device_choice: usize = input.trim().parse().unwrap_or(0);
 
                 if device_choice == 0 {
-                    println!("Saindo...");
+                    println!("Exiting...");
                     return Ok(());
                 }
 
                 let selected_device = devices
                     .get(device_choice - 1)
                     .and_then(|device| device.get("LOCATION"))
-                    .ok_or("Dispositivo inválido ou sem LOCATION.")?;
+                    .ok_or("Invalid device or missing LOCATION.")?;
 
-                // Obtém a descrição do dispositivo selecionado
-                println!("Obtendo descrição do dispositivo...");
+                // Fetches the description of the selected device
                 if let Err(e) = fetch_device_description(selected_device).await {
-                    eprintln!("Erro ao obter a descrição do dispositivo: {}", e);
-                } else {
-                    println!("Descrição do dispositivo obtida com sucesso.");
+                    eprintln!("Error fetching device description: {}", e);
+                    return Ok(());
                 }
 
-                println!("Você selecionou o dispositivo: {}", selected_device);
+                println!("You selected the device: {}", selected_device);
 
-                // Lista os arquivos de mídia
+                // Lists media files
                 let media_files = list_media_files(&config.media_directory);
-
-                // Pergunta ao usuário qual arquivo de mídia deseja transmitir
-                println!("\nEscolha um arquivo de mídia pelo número (ou digite '0' para sair):");
                 
                 if media_files.is_empty() {
-                    println!("Nenhum arquivo de mídia encontrado no diretório: {}", config.media_directory);
+                    println!("No media files found in the directory: {}", config.media_directory);
+                    return Ok(());
                 } else {
-                    println!("Arquivos de mídia encontrados:");
-                    for (i ,file) in media_files.iter().enumerate() {
-                        println!("{}- {}", i+1 ,file.name);
+                    println!("\nMedia files found:");
+                    for (i, file) in media_files.iter().enumerate() {
+                        println!("{}) {}", i + 1, file.name);
                     }
+                    // Asks the user which media file they want to stream
+                    println!("\nChoose a media file by number (or type '0' to exit):");
                 }
 
                 input.clear();
@@ -95,40 +92,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let media_choice: usize = input.trim().parse().unwrap_or(0);
 
                 if media_choice == 0 {
-                    println!("Saindo...");
+                    println!("Exiting...");
                     return Ok(());
                 }
 
                 let selected_media = media_files
                 .get(media_choice - 1)
-                .ok_or("Arquivo de mídia inválido.")?;
+                .ok_or("Invalid media file.")?;
 
-                println!("Você selecionou o arquivo de mídia: {}", selected_media.name);
+                println!("You selected the media file: {}", selected_media.name);
 
-                // Inicia o streaming para o dispositivo DLNA
-                println!("Iniciando a transmissão para o dispositivo: {}", selected_device);
-                // Remove o sufixo "/dmr", se presente
+                // Starts streaming to the DLNA device
+                println!("Starting streaming to the device: {}", selected_device);
+
                 let selected_device_cleaned = selected_device.trim_end_matches("/dmr").to_string();
-
-                // Verifica o valor após limpeza
-                println!("Dispositivo selecionado (limpo): {}", selected_device_cleaned);
                 stream_media(&selected_device_cleaned, selected_media).await?;
 
-                println!("Transmissão concluída com sucesso!");
+                println!("Streaming completed successfully!");
             }
         }
         Err(e) => {
-            println!("Erro ao descobrir dispositivos SSDP: {}", e);
+            println!("Error discovering SSDP devices: {}", e);
         }
     }
 
-    // Aguarda o término do programa (Ctrl+C para finalizar)
+    // Waits for the program to terminate (Ctrl+C to exit)
     tokio::signal::ctrl_c().await?;
-    println!("Encerrando o servidor HTTP...");
+    println!("Shutting down the HTTP server...");
 
-    // Cancela a tarefa do servidor HTTP
+    // Cancels the HTTP server task
     //server_task.abort();
 
     Ok(())
 }
-

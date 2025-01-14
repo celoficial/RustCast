@@ -25,7 +25,7 @@ pub async fn handle_request(
     }
 }
 
-/// Lida com o endpoint `/description.xml`
+/// Handles the `/description.xml` endpoint
 fn handle_description_request() -> Result<Response<Body>, hyper::Error> {
     let xml = r#"<?xml version="1.0"?>
     <root xmlns="urn:schemas-upnp-org:device-1-0">
@@ -48,7 +48,7 @@ fn handle_description_request() -> Result<Response<Body>, hyper::Error> {
     Ok(Response::new(Body::from(xml)))
 }
 
-/// Lida com o endpoint `/media`
+/// Handles the `/media` endpoint
 fn handle_media_list_request(config: &Config) -> Result<Response<Body>, hyper::Error> {
     let media_files = list_media_files(&config.media_directory);
     let json = json!(media_files);
@@ -56,21 +56,19 @@ fn handle_media_list_request(config: &Config) -> Result<Response<Body>, hyper::E
     Ok(Response::new(Body::from(json.to_string())))
 }
 
-/// Lida com o endpoint `/media/{media_name}`
+/// Handles the `/media/{media_name}` endpoint
 fn handle_media_file_request(
     media_name: &str,
     config: &Config,
 ) -> Result<Response<Body>, hyper::Error> {
     let file_path = Path::new(&config.media_directory).join(media_name);
 
-    //replace \\ with / on file_path
+    // Replace \\ with / in file_path
     let file_path2 = file_path.display().to_string().replace("\\", "/");
     let file_path = Path::new(&file_path2);
 
-    println!("Arquivo solicitado: {:?}", file_path);
-
     if file_path.exists() && file_path.is_file() {
-        // Determina o tipo MIME
+        // Determines the MIME type
         let mime_type = match file_path.extension().and_then(|ext| ext.to_str()) {
             Some("mp4") => "video/mp4",
             Some("mkv") => "video/x-matroska",
@@ -80,7 +78,7 @@ fn handle_media_file_request(
             _ => "application/octet-stream",
         };
 
-        // Envia o arquivo como resposta
+        // Sends the file as a response
         match fs::read(&file_path) {
             Ok(content) => {
                 Ok(Response::builder()
@@ -92,15 +90,15 @@ fn handle_media_file_request(
                 .body(Body::from(content))
                 .unwrap())
             },
-            Err(_) => respond_internal_server_error("Erro ao ler o arquivo"),
+            Err(_) => respond_internal_server_error("Error reading the file"),
         }
     } else {
-        println!("Arquivo não encontrado: {:?}", file_path);
+        println!("File not found: {:?}", file_path);
         respond_not_found()
     }
 }
 
-/// Responde com 404 - Not Found
+/// Responds with 404 - Not Found
 fn respond_not_found() -> Result<Response<Body>, hyper::Error> {
     Ok(Response::builder()
         .status(StatusCode::NOT_FOUND)
@@ -108,12 +106,12 @@ fn respond_not_found() -> Result<Response<Body>, hyper::Error> {
         .unwrap())
 }
 
-/// Responde com 500 - Internal Server Error
+/// Responds with 500 - Internal Server Error
 fn respond_internal_server_error(
     message: &str,
 ) -> Result<Response<Body>, hyper::Error> {
     Ok(Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
-        .body(Body::from(message.to_string())) // Converte para String
+        .body(Body::from(message.to_string())) // Converts to String
         .unwrap())
 }
