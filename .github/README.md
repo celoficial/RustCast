@@ -85,7 +85,7 @@ RustCast uses the following protocols and technologies:
 
 ## Contribution 🤝
 
-Contributions are welcome! Please read the [CONTRIBUTING.md](CONTRIBUTING.md) file for detailed information on how to contribute.
+Contributions are welcome! Please read the [CONTRIBUTING.md](.github/CONTRIBUTING.md) file for detailed information on how to contribute.
 
 ### Examples of Contributions
 
