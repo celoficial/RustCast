@@ -2,6 +2,23 @@
 
 Thank you for your interest in contributing to **RustCast**! We welcome contributions of all kinds, including bug fixes, new features, documentation improvements, and more. This guide outlines the process for contributing.
 
+## Project Structure
+
+```plaintext
+dlna-server/
+├── src/
+│   ├── config/         # Configuration (environment variable parsing and structs)
+│   ├── discovery/      # SSDP and UPnP logic for device discovery
+│   ├── media/          # Media management (videos, subtitles, transcoding)
+│   ├── server/         # HTTP server for XML responses and media streaming
+│   ├── utils/          # Generic utilities (logging, etc.)
+│   ├── main.rs         # Application entry point
+├── .env                # Environment variables
+├── .env.example        # Environment variable template
+├── Cargo.toml          # Dependencies and metadata
+├── LICENSE             # Apache 2.0 license file
+```
+
 ## Getting Started
 
 1. **Fork the repository**: Create your own fork of the project by clicking the "Fork" button on the GitHub page.
@@ -65,10 +82,6 @@ Thank you for your interest in contributing to **RustCast**! We welcome contribu
    - Open a pull request against the main repository. Be sure to:
      - Provide a clear description of your changes.
      - Link to related issues, if applicable.
-
-## Code of Conduct
-
-By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Communication
 
