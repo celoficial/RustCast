@@ -16,8 +16,8 @@ jobs:
         with:
           toolchain: stable
       - name: Build
-        run: cargo build --verbose
+        run: cd dlna-server && cargo build --verbose
       - name: Test
-        run: cargo test --verbose
+        run: cd dlna-server && cargo test --verbose
       - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
+        run: cd dlna-server && cargo clippy --all-targets -- -D warnings
