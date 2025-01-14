@@ -63,6 +63,12 @@ fn handle_media_file_request(
 ) -> Result<Response<Body>, hyper::Error> {
     let file_path = Path::new(&config.media_directory).join(media_name);
 
+    //replace \\ with / on file_path
+    let file_path2 = file_path.display().to_string().replace("\\", "/");
+    let file_path = Path::new(&file_path2);
+
+    println!("Arquivo solicitado: {:?}", file_path);
+
     if file_path.exists() && file_path.is_file() {
         // Determina o tipo MIME
         let mime_type = match file_path.extension().and_then(|ext| ext.to_str()) {

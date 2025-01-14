@@ -107,7 +107,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Inicia o streaming para o dispositivo DLNA
                 println!("Iniciando a transmissão para o dispositivo: {}", selected_device);
-                stream_media(selected_device, selected_media).await?;
+                // Remove o sufixo "/dmr", se presente
+                let selected_device_cleaned = selected_device.trim_end_matches("/dmr").to_string();
+
+                // Verifica o valor após limpeza
+                println!("Dispositivo selecionado (limpo): {}", selected_device_cleaned);
+                stream_media(&selected_device_cleaned, selected_media).await?;
 
                 println!("Transmissão concluída com sucesso!");
             }
