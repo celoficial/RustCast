@@ -9,7 +9,7 @@ pub struct MediaFile {
 
 pub fn list_media_files(directory: &str) -> Vec<MediaFile> {
     let mut media_files = Vec::new();
-    println!("Lendo diretório de mídia: {}", directory);
+    println!("Reading media directory: {}", directory);
     if let Ok(entries) = fs::read_dir(directory) {
         for entry in entries {
             if let Ok(entry) = entry {

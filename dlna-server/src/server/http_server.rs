@@ -5,42 +5,20 @@ use crate::server::endpoints::handle_request;
 use crate::config::Config;
 use std::sync::Arc;
 
-// async fn serve_description(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-//     let xml = r#"<?xml version="1.0"?>
-// <root xmlns="urn:schemas-upnp-org:device-1-0">
-//     <specVersion>
-//         <major>1</major>
-//         <minor>0</minor>
-//     </specVersion>
-//     <device>
-//         <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
-//         <friendlyName>Rust DLNA Server</friendlyName>
-//         <manufacturer>Rust Inc.</manufacturer>
-//         <manufacturerURL>http://www.rust-dlna.com</manufacturerURL>
-//         <modelName>DLNA Server v1</modelName>
-//         <modelDescription>A Rust-based DLNA Media Server</modelDescription>
-//         <modelURL>http://www.rust-dlna.com/models/server</modelURL>
-//         <UDN>uuid:12345678-1234-1234-1234-123456789abc</UDN>
-//     </device>
-// </root>"#;
-
-//     Ok(Response::new(Body::from(xml)))
-// }
-
 pub async fn start_http_server(port: u16, config: Config) {
     let addr = ([0, 0, 0, 0], port).into();
-    println!("Iniciando servidor HTTP na porta {}", port);
+    println!("Starting HTTP server on port {}", port);
 
-    // Usa Arc para permitir compartilhamento seguro de `config`
+    // Uses Arc to allow safe sharing of `config`
     let shared_config = Arc::new(config);
 
     let make_svc = make_service_fn(move |_conn| {
-        // Clona o Arc para cada conexão
+        // Clones the Arc for each connection
         let config = Arc::clone(&shared_config);
 
         async move {
             Ok::<_, hyper::Error>(service_fn(move |req: Request<Body>| {
-                // Clona o Arc para uso no handler
+                // Clones the Arc for use in the handler
                 let config = Arc::clone(&config);
                 async move { handle_request(req, &config).await }
             }))
@@ -50,6 +28,6 @@ pub async fn start_http_server(port: u16, config: Config) {
     let server = Server::bind(&addr).serve(make_svc);
 
     if let Err(e) = server.await {
-        println!("Erro no servidor HTTP: {}", e);
+        println!("HTTP server error: {}", e);
     }
 }

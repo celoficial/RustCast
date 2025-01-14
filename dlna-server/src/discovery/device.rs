@@ -1,25 +1,3 @@
-// use reqwest::Client;
-
-// pub async fn fetch_device_description(location: &str) -> Result<(), Box<dyn std::error::Error>> {
-//     println!("Obtendo descrição do dispositivo de: {}", location);
-
-//     // Faz uma requisição HTTP para o endereço fornecido
-//     let client = Client::new();
-//     let response = client.get(location).send().await?;
-
-//     if response.status().is_success() {
-//         let xml = response.text().await?;
-//         println!("Descrição do dispositivo obtida:\n{}", xml);
-
-//         // Opcional: Parsear o XML
-//         // Use crates como `quick-xml` ou `serde-xml-rs` para processar o XML
-//     } else {
-//         println!("Erro ao obter descrição do dispositivo. Status: {}", response.status());
-//     }
-
-//     Ok(())
-// }
-
 use reqwest::Client;
 use serde::Deserialize;
 use serde_xml_rs::from_str;
@@ -82,23 +60,22 @@ pub async fn fetch_device_description(location: &str) -> Result<(), Box<dyn std:
 
     if response.status().is_success() {
         let xml = response.text().await?;
-        println!("Descrição do dispositivo obtida:\n{}", xml);
 
         // Parse do XML
         match parse_device_description(&xml) {
             Ok(description) => {
-                println!("Informações do dispositivo:");
-                println!("Nome: {}", description.device.friendly_name);
-                println!("Fabricante: {}", description.device.manufacturer);
-                println!("Modelo: {}", description.device.model_name);
-                println!("UDN: {}", description.device.udn);
+                println!("\nDevice Information:");
+                println!("Name: {}", description.device.friendly_name);
+                println!("Manufacturer: {}", description.device.manufacturer);
+                println!("Model: {}", description.device.model_name);
+                println!("UDN: {}\n", description.device.udn);
 
                 if let Some(service_list) = description.device.service_list {
-                    println!("Serviços disponíveis:");
+                    println!("Available services:\n");
                     for service in service_list.services {
-                        println!(" - Tipo: {}", service.service_type);
-                        println!("   Controle: {}", service.control_url);
-                        println!("   SCPD: {}", service.scpd_url);
+                        println!(" - Type: {}", service.service_type);
+                        println!("   Control: {}", service.control_url);
+                        println!("   SCPD: {}\n", service.scpd_url);
                     }
                 }
             }

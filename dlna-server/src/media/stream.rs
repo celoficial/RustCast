@@ -3,7 +3,7 @@ use crate::config::Config;
 
 use super::manager::MediaFile;
 
-// Função para configurar a conexão (PrepareForConnection)
+// Function to set up the connection (PrepareForConnection)
 pub async fn prepare_connection(device_url: &str) -> Result<(), Box<dyn std::error::Error>> {
   let soap_body = format!(
       r#"
@@ -32,38 +32,38 @@ pub async fn prepare_connection(device_url: &str) -> Result<(), Box<dyn std::err
   let response = client.request(request).await?;
 
   if !response.status().is_success() {
-      return Err(format!("Falha ao configurar conexão. Status: {}", response.status()).into());
+      return Err(format!("Failed to configure connection. Status: {}", response.status()).into());
   }
 
-  println!("Conexão configurada com sucesso!");
+  println!("Connection configured successfully!");
   Ok(())
 }
 
-// Função para transmitir a mídia
+// Function to stream media
 pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<(), Box<dyn std::error::Error>> {
   let config = Config::from_env();
   let file_path = std::path::Path::new(&media_file.path);
 
   if !file_path.exists() {
-      return Err(format!("O arquivo '{}' não foi encontrado.", media_file.path).into());
+      return Err(format!("The file '{}' was not found.", media_file.path).into());
   }
 
   let normalized_path = file_path.canonicalize()?;
   let cleaned_path = normalized_path.to_str().unwrap_or("").trim_start_matches(r"\\?\");
 
-  println!("Iniciando transmissão de: {}", normalized_path.display());
+  println!("Starting streaming of: {}", normalized_path.display());
 
-  // URL onde o arquivo está disponível para a TV
+  // URL where the file is available to the TV
   let media_url = format!("http://{}:{}/media/{}", config.http_address, config.http_port, cleaned_path);
 
-  // Adiciona a etapa de prepare_connection
+  // Adds the prepare_connection step
   prepare_connection(device_url).await?;
 
   let client = hyper::Client::new();
 
   //let av_transport_url = "http://192.168.0.109:9197/upnp/control/AVTransport1";
 
-  // Metadados do URI (opcional, mas algumas TVs exigem)
+  // URI metadata (optional, but required by some TVs)
   let current_uri_metadata = format!(
       r#"
       <DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
@@ -92,7 +92,7 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
       media_url, current_uri_metadata
   );
 
-  println!("Enviando comando SetAVTransportURI para {}/upnp/control/AVTransport1", device_url);
+  println!("Sending SetAVTransportURI command to {}/upnp/control/AVTransport1", device_url);
 
   let request_set_uri = hyper::Request::builder()
       .method(hyper::Method::POST)
@@ -105,15 +105,15 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
   if !response_set_uri.status().is_success() {
       let body_bytes = hyper::body::to_bytes(response_set_uri.into_body()).await?;
       return Err(format!(
-          "Falha ao configurar transporte. Status: {}. Resposta: {}",
+          "Failed to configure transport. Status: {}. Response: {}",
           "400 hardcoded",
           String::from_utf8_lossy(&body_bytes)
       ).into());
   }
 
-  println!("Mídia configurada com sucesso! Enviando comando Play...");
+  println!("Media configured successfully! Sending Play command...");
 
-  // Adiciona o comando Play
+  // Adds the Play command
   let soap_body_play = r#"
   <?xml version="1.0"?>
   <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -137,14 +137,13 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
   if !response_play.status().is_success() {
       let body_bytes = hyper::body::to_bytes(response_play.into_body()).await?;
       return Err(format!(
-          "Falha ao iniciar reprodução. Status: {}. Resposta: {}",
+          "Failed to start playback. Status: {}. Response: {}",
           "400 hardcoded",
           String::from_utf8_lossy(&body_bytes)
       ).into());
   }
 
-  println!("Reprodução iniciada com sucesso!");
+  println!("Playback started successfully!");
 
   Ok(())
 }
-
