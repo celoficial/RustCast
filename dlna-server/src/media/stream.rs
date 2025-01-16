@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use hyper::{Body, Client, Method, Request};
 use crate::config::Config;
 
@@ -61,7 +63,7 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
 
   let client = hyper::Client::new();
 
-  //let av_transport_url = "http://192.168.0.109:9197/upnp/control/AVTransport1";
+  let http_header = get_file_http_header(media_file.path.to_string());
 
   // URI metadata (optional, but required by some TVs)
   let current_uri_metadata = format!(
@@ -69,11 +71,11 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
       <DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
           <item id="0" parentID="-1" restricted="1">
               <dc:title>{}</dc:title>
-              <res protocolInfo="http-get:*:video/mp4:DLNA.ORG_OP=01">{}</res>
+              <res protocolInfo="http-get:*:{}:DLNA.ORG_OP=01">{}</res>
           </item>
       </DIDL-Lite>
       "#,
-      media_file.name, media_url
+      media_file.name, http_header, media_url
   );
 
   let soap_body_set_uri = format!(
@@ -146,4 +148,20 @@ pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<()
   println!("Playback started successfully!");
 
   Ok(())
+}
+
+fn get_file_http_header(file_path:String) -> String {
+    let path = Path::new(&file_path);
+
+    // Determines the MIME type
+    let header = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("mp4") => "video/mp4",
+        Some("mkv") => "video/x-matroska",
+        Some("avi") => "video/x-msvideo",
+        Some("mp3") => "audio/mpeg",
+        Some("srt") => "application/x-subrip",
+        _ => "application/octet-stream",
+    };
+
+    return header.to_string();
 }

@@ -6,6 +6,15 @@
 
 RustCast is a lightweight **DLNA (Digital Living Network Alliance) server**, written in **Rust**, that allows you to stream media from your computer to compatible devices, such as Smart TVs, speakers, and other devices.
 
+## Roadmap
+
+- [x] Device discovery via SSDP
+- [x] Fetching device XML description
+- [x] Media streaming (mp4, mkv, avi)
+- [ ] Subtitle support
+- [ ] Controls support
+- [ ] Graphical user interface for end users
+
 ## Features 🎥
 
 - **Device discovery** via **SSDP (Simple Service Discovery Protocol)**.
@@ -93,15 +102,6 @@ Contributions are welcome! Please read the [CONTRIBUTING.md](.github/CONTRIBUTIN
 - Adding new features ✨
 - Improving documentation 📖
 - Writing tests and benchmarks 🧪
-
-## Roadmap
-
-- [x] Device discovery via SSDP
-- [x] Fetching device XML description
-- [x] Media streaming subtitle
-- [ ] Controls support
-- [ ] Subtitle support
-- [ ] Graphical user interface for end users
 
 ## License
 
