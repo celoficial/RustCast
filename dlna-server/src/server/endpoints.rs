@@ -72,9 +72,7 @@ fn handle_media_list_request(config: &Config) -> Result<Response<Body>, hyper::E
 /// Returns (start, end) clamped to [0, file_size-1], or None if invalid/unsatisfiable.
 fn parse_range(range_str: &str, file_size: u64) -> Option<(u64, u64)> {
     let stripped = range_str.strip_prefix("bytes=")?;
-    let mut parts = stripped.splitn(2, '-');
-    let start_str = parts.next()?;
-    let end_str = parts.next()?;
+    let (start_str, end_str) = stripped.split_once('-')?;
 
     let (start, end) = if start_str.is_empty() {
         // Suffix range: bytes=-N → last N bytes

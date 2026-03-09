@@ -13,7 +13,7 @@ use discovery::advertise::{send_notify_byebye, start_ssdp_advertiser};
 use discovery::device::{
     extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url,
 };
-use discovery::discovery::discover_ssdp;
+use discovery::ssdp::discover_ssdp;
 use media::manager::list_media_files;
 use media::stream::{
     get_transport_state, pause_media, resume_media, seek_media, stop_media, stream_media,
