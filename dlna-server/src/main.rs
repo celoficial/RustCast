@@ -9,6 +9,7 @@ mod server;
 mod media;
 
 use config::Config;
+use discovery::advertise::{send_notify_byebye, start_ssdp_advertiser};
 use discovery::discovery::discover_ssdp;
 use discovery::device::{extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url};
 use server::http_server::start_http_server;
@@ -77,6 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_task = tokio::spawn(async move {
         start_http_server(server_config.http_port, server_config).await;
     });
+
+    let advertiser_task = start_ssdp_advertiser(config.clone());
 
     // Spawn a stdin reader task that forwards lines to a channel.
     // This prevents dropped futures from losing buffered input.
@@ -316,7 +319,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::signal::ctrl_c().await?;
     }
 
+    send_notify_byebye(&config).await;
     println!("Shutting down...");
+    advertiser_task.abort();
     server_task.abort();
     Ok(())
 }
