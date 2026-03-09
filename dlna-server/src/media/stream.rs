@@ -1,14 +1,19 @@
-use std::path::Path;
-
 use hyper::{Body, Client, Method, Request};
 use crate::config::Config;
-
 use super::manager::MediaFile;
 
-// Function to set up the connection (PrepareForConnection)
-pub async fn prepare_connection(device_url: &str) -> Result<(), Box<dyn std::error::Error>> {
-  let soap_body = format!(
-      r#"
+/// Escapes special XML characters to prevent injection.
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+     .replace('<', "&lt;")
+     .replace('>', "&gt;")
+     .replace('"', "&quot;")
+     .replace('\'', "&apos;")
+}
+
+/// Sends the PrepareForConnection SOAP action to the device's ConnectionManager.
+pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let soap_body = r#"
       <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
         <s:Body>
           <u:PrepareForConnection xmlns:u="urn:schemas-upnp-org:service:ConnectionManager:1">
@@ -19,149 +24,149 @@ pub async fn prepare_connection(device_url: &str) -> Result<(), Box<dyn std::err
           </u:PrepareForConnection>
         </s:Body>
       </s:Envelope>
-      "#
-  );
+    "#;
 
-  let client = Client::new();
-  
-  let request = Request::builder()
-      .method(Method::POST)
-      .uri(format!("{device_url}/drm/upnp/control/ConnectionManager1"))
-      .header("SOAPACTION", r#""urn:schemas-upnp-org:service:ConnectionManager:1#PrepareForConnection""#)
-      .header("Content-Type", "text/xml; charset=\"utf-8\"")
-      .body(Body::from(soap_body))?;
+    let client = Client::new();
 
-  let response = client.request(request).await?;
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(cm_control_url)
+        .header("SOAPACTION", r#""urn:schemas-upnp-org:service:ConnectionManager:1#PrepareForConnection""#)
+        .header("Content-Type", "text/xml; charset=\"utf-8\"")
+        .body(Body::from(soap_body))?;
 
-  if !response.status().is_success() {
-      return Err(format!("Failed to configure connection. Status: {}", response.status()).into());
-  }
+    let response = client.request(request).await?;
 
-  println!("Connection configured successfully!");
-  Ok(())
+    if !response.status().is_success() {
+        return Err(format!("Failed to configure connection. Status: {}", response.status()).into());
+    }
+
+    println!("Connection configured successfully!");
+    Ok(())
 }
 
-// Function to stream media
-pub async fn stream_media(device_url: &str, media_file: &MediaFile) -> Result<(), Box<dyn std::error::Error>> {
-  let config = Config::from_env();
-  let file_path = std::path::Path::new(&media_file.path);
+/// Streams a media file to the DLNA device using the discovered control URLs.
+pub async fn stream_media(
+    config: &Config,
+    av_control_url: &str,
+    cm_control_url: &str,
+    media_file: &MediaFile,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let file_path = std::path::Path::new(&media_file.path);
 
-  if !file_path.exists() {
-      return Err(format!("The file '{}' was not found.", media_file.path).into());
-  }
+    if !file_path.exists() {
+        return Err(format!("The file '{}' was not found.", media_file.path).into());
+    }
 
-  let normalized_path = file_path.canonicalize()?;
-  let cleaned_path = normalized_path.to_str().unwrap_or("").trim_start_matches(r"\\?\");
+    println!("Starting streaming of: {}", media_file.path);
 
-  println!("Starting streaming of: {}", normalized_path.display());
+    // URL that the TV will use to fetch the media — use just the filename
+    let media_url = format!(
+        "http://{}:{}/media/{}",
+        config.http_address, config.http_port, media_file.name
+    );
 
-  // URL where the file is available to the TV
-  let media_url = format!("http://{}:{}/media/{}", config.http_address, config.http_port, cleaned_path);
+    // PrepareForConnection using the discovered ConnectionManager URL
+    prepare_connection(cm_control_url).await?;
 
-  // Adds the prepare_connection step
-  prepare_connection(device_url).await?;
+    let client = hyper::Client::new();
 
-  let client = hyper::Client::new();
+    let mime_type = get_mime_type(&media_file.path);
 
-  let http_header = get_file_http_header(media_file.path.to_string());
+    // DIDL-Lite metadata — escape all values to prevent XML injection
+    let title_escaped = xml_escape(&media_file.name);
+    let url_escaped = xml_escape(&media_url);
+    let mime_escaped = xml_escape(mime_type);
 
-  // URI metadata (optional, but required by some TVs)
-  let current_uri_metadata = format!(
-      r#"
-      <DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">
-          <item id="0" parentID="-1" restricted="1">
-              <dc:title>{}</dc:title>
-              <res protocolInfo="http-get:*:{}:DLNA.ORG_OP=01">{}</res>
-          </item>
-      </DIDL-Lite>
-      "#,
-      media_file.name, http_header, media_url
-  );
+    let current_uri_metadata = format!(
+        r#"<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="0" parentID="-1" restricted="1"><dc:title>{}</dc:title><res protocolInfo="http-get:*:{}:DLNA.ORG_OP=01">{}</res></item></DIDL-Lite>"#,
+        title_escaped, mime_escaped, url_escaped
+    );
 
-  let soap_body_set_uri = format!(
-      r#"
-      <?xml version="1.0"?>
-      <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-          <s:Body>
-              <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-                  <InstanceID>0</InstanceID>
-                  <CurrentURI>{}</CurrentURI>
-                  <CurrentURIMetaData>{}</CurrentURIMetaData>
-              </u:SetAVTransportURI>
-          </s:Body>
-      </s:Envelope>
-      "#,
-      media_url, current_uri_metadata
-  );
+    // The metadata must be XML-escaped when embedded inside the SOAP body
+    let metadata_escaped = xml_escape(&current_uri_metadata);
 
-  println!("Sending SetAVTransportURI command to {}/upnp/control/AVTransport1", device_url);
+    let soap_body_set_uri = format!(
+        r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+    <s:Body>
+        <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+            <InstanceID>0</InstanceID>
+            <CurrentURI>{}</CurrentURI>
+            <CurrentURIMetaData>{}</CurrentURIMetaData>
+        </u:SetAVTransportURI>
+    </s:Body>
+</s:Envelope>"#,
+        xml_escape(&media_url), metadata_escaped
+    );
 
-  let request_set_uri = hyper::Request::builder()
-      .method(hyper::Method::POST)
-      .uri(format!("{}/upnp/control/AVTransport1", device_url))
-      .header("Content-Type", "text/xml; charset=utf-8")
-      .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"")
-      .body(hyper::Body::from(soap_body_set_uri))?;
+    println!("Sending SetAVTransportURI command to {}", av_control_url);
 
-  let response_set_uri = client.request(request_set_uri).await?;
-  if !response_set_uri.status().is_success() {
-      let body_bytes = hyper::body::to_bytes(response_set_uri.into_body()).await?;
-      return Err(format!(
-          "Failed to configure transport. Status: {}. Response: {}",
-          "400 hardcoded",
-          String::from_utf8_lossy(&body_bytes)
-      ).into());
-  }
+    let request_set_uri = hyper::Request::builder()
+        .method(hyper::Method::POST)
+        .uri(av_control_url)
+        .header("Content-Type", "text/xml; charset=utf-8")
+        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"")
+        .body(hyper::Body::from(soap_body_set_uri))?;
 
-  println!("Media configured successfully! Sending Play command...");
+    let response_set_uri = client.request(request_set_uri).await?;
+    let status_set_uri = response_set_uri.status();
+    if !status_set_uri.is_success() {
+        let body_bytes = hyper::body::to_bytes(response_set_uri.into_body()).await?;
+        return Err(format!(
+            "Failed to configure transport. Status: {}. Response: {}",
+            status_set_uri,
+            String::from_utf8_lossy(&body_bytes)
+        ).into());
+    }
 
-  // Adds the Play command
-  let soap_body_play = r#"
-  <?xml version="1.0"?>
-  <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-      <s:Body>
-          <u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-              <InstanceID>0</InstanceID>
-              <Speed>1</Speed>
-          </u:Play>
-      </s:Body>
-  </s:Envelope>
-  "#;
+    println!("Media configured successfully! Sending Play command...");
 
-  let request_play = hyper::Request::builder()
-      .method(hyper::Method::POST)
-      .uri(format!("{}/upnp/control/AVTransport1", device_url))
-      .header("Content-Type", "text/xml; charset=utf-8")
-      .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Play\"")
-      .body(hyper::Body::from(soap_body_play))?;
+    let soap_body_play = r#"<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+    <s:Body>
+        <u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+            <InstanceID>0</InstanceID>
+            <Speed>1</Speed>
+        </u:Play>
+    </s:Body>
+</s:Envelope>"#;
 
-  let response_play = client.request(request_play).await?;
-  if !response_play.status().is_success() {
-      let body_bytes = hyper::body::to_bytes(response_play.into_body()).await?;
-      return Err(format!(
-          "Failed to start playback. Status: {}. Response: {}",
-          "400 hardcoded",
-          String::from_utf8_lossy(&body_bytes)
-      ).into());
-  }
+    let request_play = hyper::Request::builder()
+        .method(hyper::Method::POST)
+        .uri(av_control_url)
+        .header("Content-Type", "text/xml; charset=utf-8")
+        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Play\"")
+        .body(hyper::Body::from(soap_body_play))?;
 
-  println!("Playback started successfully!");
+    let response_play = client.request(request_play).await?;
+    let status_play = response_play.status();
+    if !status_play.is_success() {
+        let body_bytes = hyper::body::to_bytes(response_play.into_body()).await?;
+        return Err(format!(
+            "Failed to start playback. Status: {}. Response: {}",
+            status_play,
+            String::from_utf8_lossy(&body_bytes)
+        ).into());
+    }
 
-  Ok(())
+    println!("Playback started successfully!");
+
+    Ok(())
 }
 
-fn get_file_http_header(file_path:String) -> String {
-    let path = Path::new(&file_path);
+pub fn get_mime_type(file_path: &str) -> &'static str {
+    let ext = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
 
-    // Determines the MIME type
-    let header = match path.extension().and_then(|ext| ext.to_str()) {
-        Some("mp4") => "video/mp4",
-        Some("mkv") => "video/x-matroska",
-        Some("avi") => "video/x-msvideo",
-        Some("mp3") => "audio/mpeg",
-        Some("srt") => "application/x-subrip",
+    match ext.to_lowercase().as_str() {
+        "mp4" => "video/mp4",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "mp3" => "audio/mpeg",
+        "srt" => "application/x-subrip",
         _ => "application/octet-stream",
-    };
-
-    return header.to_string();
+    }
 }
