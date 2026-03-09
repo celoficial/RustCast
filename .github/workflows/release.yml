@@ -50,8 +50,6 @@ jobs:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: dlna-server
 
       - name: Install cross
         if: matrix.use_cross
@@ -61,16 +59,16 @@ jobs:
 
       - name: Build (native)
         if: ${{ !matrix.use_cross }}
-        run: cargo build --manifest-path dlna-server/Cargo.toml --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Build (cross)
         if: matrix.use_cross
-        run: cd dlna-server && cross build --release --target ${{ matrix.target }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Rename binary
         shell: bash
         run: |
-          cp "dlna-server/target/${{ matrix.target }}/release/${{ matrix.artifact }}" "${{ matrix.asset_name }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.artifact }}" "${{ matrix.asset_name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -13,12 +13,21 @@ use discovery::advertise::{send_notify_byebye, start_ssdp_advertiser};
 use discovery::device::{
     extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url,
 };
-use discovery::ssdp::discover_ssdp;
+use discovery::ssdp::{discover_ssdp, rediscover_by_usn};
 use media::manager::list_media_files;
 use media::stream::{
-    get_transport_state, pause_media, resume_media, seek_media, stop_media, stream_media,
+    get_transport_state, new_soap_client, pause_media, resume_media, seek_media, stop_media,
+    stream_media,
 };
 use server::http_server::start_http_server;
+
+/// Signal sent by the transport-state polling task to the control loop.
+#[derive(Clone, PartialEq)]
+enum PollSignal {
+    Running,
+    Stopped,
+    DeviceOffline,
+}
 
 /// Looks for a `.srt` subtitle file alongside the media file (same base name).
 /// Returns the HTTP URL the renderer should use to fetch it, or None if not found.
@@ -156,10 +165,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let selected_location = devices[device_choice - 1]
+    let selected_device = &devices[device_choice - 1];
+    let selected_location = selected_device
         .get("LOCATION")
         .ok_or("Selected device has no LOCATION")?
         .clone();
+
+    // Retain USN so we can rediscover this device if it goes offline
+    let selected_usn = selected_device.get("USN").cloned();
 
     // Reuse the already-fetched description; fall back to a fresh fetch if it failed
     let description = match desc_results.into_iter().nth(device_choice - 1) {
@@ -175,9 +188,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let base_url = extract_base_url(&selected_location);
-    let av_control_url = find_control_url(&description, "AVTransport", &base_url)
+    let mut av_control_url = find_control_url(&description, "AVTransport", &base_url)
         .unwrap_or_else(|| format!("{}/upnp/control/AVTransport1", base_url));
-    let cm_control_url = find_control_url(&description, "ConnectionManager", &base_url)
+    let mut cm_control_url = find_control_url(&description, "ConnectionManager", &base_url)
         .unwrap_or_else(|| format!("{}/upnp/control/ConnectionManager1", base_url));
 
     let display_name = if description.device.friendly_name.is_empty() {
@@ -224,6 +237,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  {}) {}", i + 1, file.name);
     }
 
+    // Single shared SOAP client — connection pool is reused across all calls
+    let soap_client = new_soap_client();
+
     let mut quit = false;
     for (idx, media_file) in playlist.iter().enumerate() {
         if quit {
@@ -243,6 +259,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         if let Err(e) = stream_media(
+            &soap_client,
             &config,
             &av_control_url,
             &cm_control_url,
@@ -257,24 +274,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("Streaming started!");
 
-        // Poll transport state every 3s; signal when STOPPED
-        let (stopped_tx, mut stopped_rx) = tokio::sync::watch::channel(false);
+        // Poll transport state every 3s.
+        // After OFFLINE_THRESHOLD consecutive failures, signals DeviceOffline.
+        const OFFLINE_THRESHOLD: u32 = 3;
+        let (poll_tx, mut poll_rx) = tokio::sync::watch::channel(PollSignal::Running);
+        let poll_client = soap_client.clone();
         let av_url = av_control_url.clone();
         let poll_task = tokio::spawn(async move {
+            let mut consecutive_errors: u32 = 0;
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                match get_transport_state(&av_url).await {
+                match get_transport_state(&poll_client, &av_url).await {
                     Ok(state) if state == "STOPPED" => {
-                        let _ = stopped_tx.send(true);
+                        let _ = poll_tx.send(PollSignal::Stopped);
                         break;
                     }
-                    _ => {}
+                    Ok(_) => {
+                        consecutive_errors = 0;
+                    }
+                    Err(e) => {
+                        consecutive_errors += 1;
+                        eprintln!(
+                            "[poll] transport query failed ({}/{}): {}",
+                            consecutive_errors, OFFLINE_THRESHOLD, e
+                        );
+                        if consecutive_errors >= OFFLINE_THRESHOLD {
+                            let _ = poll_tx.send(PollSignal::DeviceOffline);
+                            break;
+                        }
+                    }
                 }
             }
         });
 
         println!("Controls: [p] Pause/Resume  [s] Stop  [f] Seek  [n] Next  [q] Quit");
-        let mut paused = false;
 
         'control: loop {
             tokio::select! {
@@ -283,7 +316,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Some(c) => c,
                         None => {
                             // stdin closed — stop and exit
-                            stop_media(&av_control_url).await.ok();
+                            stop_media(&soap_client, &av_control_url).await.ok();
                             poll_task.abort();
                             quit = true;
                             break 'control;
@@ -291,20 +324,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     match cmd.trim() {
                         "p" => {
-                            if paused {
-                                match resume_media(&av_control_url).await {
-                                    Ok(()) => { paused = false; println!("Resumed."); }
-                                    Err(e) => eprintln!("Resume failed: {}", e),
+                            // Query actual renderer state before toggling to avoid desync
+                            match get_transport_state(&soap_client, &av_control_url).await {
+                                Ok(state) if state == "PAUSED_PLAYBACK" => {
+                                    match resume_media(&soap_client, &av_control_url).await {
+                                        Ok(()) => println!("Resumed."),
+                                        Err(e) => eprintln!("Resume failed: {}", e),
+                                    }
                                 }
-                            } else {
-                                match pause_media(&av_control_url).await {
-                                    Ok(()) => { paused = true; println!("Paused."); }
-                                    Err(e) => eprintln!("Pause failed: {}", e),
+                                Ok(state) if state == "PLAYING" => {
+                                    match pause_media(&soap_client, &av_control_url).await {
+                                        Ok(()) => println!("Paused."),
+                                        Err(e) => eprintln!("Pause failed: {}", e),
+                                    }
                                 }
+                                Ok(state) => eprintln!("Cannot pause/resume from state: {}", state),
+                                Err(e) => eprintln!("Could not query transport state: {}", e),
                             }
                         }
                         "s" => {
-                            stop_media(&av_control_url).await.ok();
+                            stop_media(&soap_client, &av_control_url).await.ok();
                             poll_task.abort();
                             break 'control;
                         }
@@ -312,19 +351,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("Enter seek position (HH:MM:SS):");
                             if let Some(pos) = stdin_rx.recv().await {
                                 let pos = pos.trim().to_string();
-                                match seek_media(&av_control_url, &pos).await {
+                                match seek_media(&soap_client, &av_control_url, &pos).await {
                                     Ok(()) => println!("Seeked to {}", pos),
                                     Err(e) => eprintln!("Seek failed: {}", e),
                                 }
                             }
                         }
                         "n" => {
-                            stop_media(&av_control_url).await.ok();
+                            stop_media(&soap_client, &av_control_url).await.ok();
                             poll_task.abort();
                             break 'control;
                         }
                         "q" => {
-                            stop_media(&av_control_url).await.ok();
+                            stop_media(&soap_client, &av_control_url).await.ok();
                             poll_task.abort();
                             quit = true;
                             break 'control;
@@ -334,11 +373,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                changed = stopped_rx.changed() => {
-                    if changed.is_ok() && *stopped_rx.borrow() {
-                        println!("\nPlayback finished. Auto-advancing...");
-                        poll_task.abort();
-                        break 'control;
+                changed = poll_rx.changed() => {
+                    if changed.is_ok() {
+                        match poll_rx.borrow().clone() {
+                            PollSignal::Stopped => {
+                                println!("\nPlayback finished. Auto-advancing...");
+                                poll_task.abort();
+                                break 'control;
+                            }
+                            PollSignal::DeviceOffline => {
+                                println!("\nDevice went offline. Attempting rediscovery...");
+                                poll_task.abort();
+
+                                let reconnected = if let Some(ref usn) = selected_usn {
+                                    match rediscover_by_usn(
+                                        &config.multicast_address,
+                                        config.multicast_port,
+                                        usn,
+                                    )
+                                    .await
+                                    {
+                                        Some(device) => device,
+                                        None => {
+                                            eprintln!("Device not found after rediscovery. Stopping.");
+                                            quit = true;
+                                            break 'control;
+                                        }
+                                    }
+                                } else {
+                                    eprintln!("No USN available for rediscovery. Stopping.");
+                                    quit = true;
+                                    break 'control;
+                                };
+
+                                let new_location = match reconnected.get("LOCATION") {
+                                    Some(l) => l.clone(),
+                                    None => {
+                                        eprintln!("Rediscovered device has no LOCATION. Stopping.");
+                                        quit = true;
+                                        break 'control;
+                                    }
+                                };
+
+                                match fetch_device_description_quiet(&new_location).await {
+                                    Ok(desc) => {
+                                        let new_base = extract_base_url(&new_location);
+                                        av_control_url = find_control_url(&desc, "AVTransport", &new_base)
+                                            .unwrap_or_else(|| format!("{}/upnp/control/AVTransport1", new_base));
+                                        cm_control_url = find_control_url(&desc, "ConnectionManager", &new_base)
+                                            .unwrap_or_else(|| format!("{}/upnp/control/ConnectionManager1", new_base));
+                                        println!("Device rediscovered. Restarting current track...");
+                                        // Break to let the outer playlist loop re-stream the current file
+                                        break 'control;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to fetch description after rediscovery: {}. Stopping.", e);
+                                        quit = true;
+                                        break 'control;
+                                    }
+                                }
+                            }
+                            PollSignal::Running => {}
+                        }
                     }
                 }
             }

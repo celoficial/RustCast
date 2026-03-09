@@ -5,18 +5,17 @@ Thank you for your interest in contributing to **RustCast**! We welcome contribu
 ## Project Structure
 
 ```plaintext
-dlna-server/
+RustCast/
 ├── src/
 │   ├── config/         # Configuration (environment variable parsing and structs)
 │   ├── discovery/      # SSDP and UPnP logic for device discovery
 │   ├── media/          # Media management (videos, subtitles, transcoding)
 │   ├── server/         # HTTP server for XML responses and media streaming
-│   ├── utils/          # Generic utilities (logging, etc.)
-│   ├── main.rs         # Application entry point
+│   └── main.rs         # Application entry point
 ├── .env                # Environment variables
 ├── .env.example        # Environment variable template
 ├── Cargo.toml          # Dependencies and metadata
-├── LICENSE             # Apache 2.0 license file
+└── LICENSE             # Apache 2.0 license file
 ```
 
 ## Getting Started

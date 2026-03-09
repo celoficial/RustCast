@@ -1,10 +1,18 @@
 use super::manager::MediaFile;
 use crate::config::Config;
 use hyper::{Body, Client, Method, Request};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 
 const SOAP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Shared hyper client — reuses connection pool across all SOAP calls.
+pub type SoapClient = Arc<Client<hyper::client::HttpConnector>>;
+
+pub fn new_soap_client() -> SoapClient {
+    Arc::new(Client::new())
+}
 
 /// Escapes special XML characters to prevent injection.
 fn xml_escape(s: &str) -> String {
@@ -16,7 +24,10 @@ fn xml_escape(s: &str) -> String {
 }
 
 /// Sends the PrepareForConnection SOAP action to the device's ConnectionManager.
-pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn prepare_connection(
+    client: &SoapClient,
+    cm_control_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let soap_body = r#"
       <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
         <s:Body>
@@ -29,8 +40,6 @@ pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std:
         </s:Body>
       </s:Envelope>
     "#;
-
-    let client = Client::new();
 
     let request = Request::builder()
         .method(Method::POST)
@@ -59,7 +68,10 @@ pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std:
 }
 
 /// Internal helper: sends AVTransport Play with Speed=1.
-async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+async fn send_play(
+    client: &SoapClient,
+    av_control_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let soap_body = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
     <s:Body>
@@ -70,7 +82,6 @@ async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error
     </s:Body>
 </s:Envelope>"#;
 
-    let client = hyper::Client::new();
     let request = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -101,6 +112,7 @@ async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error
 /// If `subtitle_url` is provided, it is embedded in the DIDL-Lite metadata so
 /// renderers that support external subtitles can load them automatically.
 pub async fn stream_media(
+    client: &SoapClient,
     config: &Config,
     av_control_url: &str,
     cm_control_url: &str,
@@ -123,11 +135,9 @@ pub async fn stream_media(
 
     // PrepareForConnection is optional in DLNA; many renderers don't support it.
     // Log failures but don't abort streaming.
-    if let Err(e) = prepare_connection(cm_control_url).await {
+    if let Err(e) = prepare_connection(client, cm_control_url).await {
         eprintln!("PrepareForConnection skipped (not supported by device): {}", e);
     }
-
-    let client = hyper::Client::new();
 
     let mime_type = get_mime_type(&media_file.path);
 
@@ -201,19 +211,25 @@ pub async fn stream_media(
     }
 
     println!("Media configured successfully! Sending Play command...");
-    send_play(av_control_url).await?;
+    send_play(client, av_control_url).await?;
     println!("Playback started successfully!");
 
     Ok(())
 }
 
 /// Resumes playback on the DLNA device.
-pub async fn resume_media(av_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
-    send_play(av_control_url).await
+pub async fn resume_media(
+    client: &SoapClient,
+    av_control_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    send_play(client, av_control_url).await
 }
 
 /// Pauses playback on the DLNA device.
-pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn pause_media(
+    client: &SoapClient,
+    av_control_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let soap_body = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
     <s:Body>
@@ -223,7 +239,6 @@ pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error:
     </s:Body>
 </s:Envelope>"#;
 
-    let client = hyper::Client::new();
     let request = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -234,7 +249,9 @@ pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error:
         )
         .body(hyper::Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "Pause timed out")??;
     let status = response.status();
     if !status.is_success() {
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -249,7 +266,10 @@ pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Stops playback on the DLNA device.
-pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn stop_media(
+    client: &SoapClient,
+    av_control_url: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let soap_body = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
     <s:Body>
@@ -259,7 +279,6 @@ pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::
     </s:Body>
 </s:Envelope>"#;
 
-    let client = hyper::Client::new();
     let request = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -270,7 +289,9 @@ pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::
         )
         .body(hyper::Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "Stop timed out")??;
     let status = response.status();
     if !status.is_success() {
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -286,6 +307,7 @@ pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::
 
 /// Seeks to a position in the current media. Position format: "HH:MM:SS"
 pub async fn seek_media(
+    client: &SoapClient,
     av_control_url: &str,
     position: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -303,7 +325,6 @@ pub async fn seek_media(
         xml_escape(position)
     );
 
-    let client = hyper::Client::new();
     let request = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -314,7 +335,9 @@ pub async fn seek_media(
         )
         .body(hyper::Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "Seek timed out")??;
     let status = response.status();
     if !status.is_success() {
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -331,6 +354,7 @@ pub async fn seek_media(
 /// Gets the current transport state from the device.
 /// Returns state string: "PLAYING", "PAUSED_PLAYBACK", "STOPPED", or "UNKNOWN".
 pub async fn get_transport_state(
+    client: &SoapClient,
     av_control_url: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let soap_body = r#"<?xml version="1.0"?>
@@ -342,7 +366,6 @@ pub async fn get_transport_state(
     </s:Body>
 </s:Envelope>"#;
 
-    let client = hyper::Client::new();
     let request = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -353,7 +376,9 @@ pub async fn get_transport_state(
         )
         .body(hyper::Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "GetTransportInfo timed out")??;
     let status = response.status();
     if !status.is_success() {
         return Err(format!("Failed to get transport info. Status: {}", status).into());

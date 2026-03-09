@@ -8,7 +8,7 @@
 ## Project structure
 
 ```
-dlna-server/
+RustCast/
 ├── src/
 │   ├── config/         # Environment variable parsing
 │   ├── discovery/      # SSDP discovery + NOTIFY advertiser
@@ -24,7 +24,7 @@ dlna-server/
 
 ```bash
 git clone https://github.com/celoficial/RustCast.git
-cd RustCast/dlna-server
+cd RustCast
 cp .env.example .env
 mkdir media   # add some test files here
 cargo run
