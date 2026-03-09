@@ -90,7 +90,9 @@ pub fn find_control_url(
 pub async fn fetch_device_description_quiet(
     location: &str,
 ) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
     let response = client.get(location).send().await?;
     if !response.status().is_success() {
         return Err(format!(
@@ -109,7 +111,9 @@ pub async fn fetch_device_description(
 ) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     println!("Fetching device description from: {}", location);
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
     let response = client.get(location).send().await?;
 
     if !response.status().is_success() {

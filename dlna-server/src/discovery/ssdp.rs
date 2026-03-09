@@ -46,22 +46,30 @@ pub async fn discover_ssdp(
                 if response.contains("urn:schemas-upnp-org:device:MediaRenderer:1") {
                     let mut device_info = HashMap::new();
 
-                    if let Some(location) =
-                        response.lines().find(|line| line.starts_with("LOCATION:"))
-                    {
-                        device_info.insert(
-                            "LOCATION".to_string(),
-                            location["LOCATION:".len()..].trim().to_string(),
-                        );
+                    // HTTP headers are case-insensitive; match accordingly
+                    fn header_value<'a>(response: &'a str, name: &str) -> Option<&'a str> {
+                        let prefix_len = name.len() + 1; // name + ':'
+                        response.lines().find_map(|line| {
+                            if line.len() > prefix_len
+                                && line[..prefix_len].eq_ignore_ascii_case(&format!("{}:", name))
+                            {
+                                Some(line[prefix_len..].trim())
+                            } else {
+                                None
+                            }
+                        })
                     }
 
-                    if let Some(usn) = response.lines().find(|line| line.starts_with("USN:")) {
-                        device_info
-                            .insert("USN".to_string(), usn["USN:".len()..].trim().to_string());
+                    if let Some(location) = header_value(&response, "LOCATION") {
+                        device_info.insert("LOCATION".to_string(), location.to_string());
                     }
 
-                    if let Some(st) = response.lines().find(|line| line.starts_with("ST:")) {
-                        device_info.insert("ST".to_string(), st["ST:".len()..].trim().to_string());
+                    if let Some(usn) = header_value(&response, "USN") {
+                        device_info.insert("USN".to_string(), usn.to_string());
+                    }
+
+                    if let Some(st) = header_value(&response, "ST") {
+                        device_info.insert("ST".to_string(), st.to_string());
                     }
 
                     if !devices

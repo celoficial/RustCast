@@ -1,6 +1,10 @@
 use super::manager::MediaFile;
 use crate::config::Config;
 use hyper::{Body, Client, Method, Request};
+use std::time::Duration;
+use tokio::time::timeout;
+
+const SOAP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Escapes special XML characters to prevent injection.
 fn xml_escape(s: &str) -> String {
@@ -38,7 +42,9 @@ pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std:
         .header("Content-Type", "text/xml; charset=\"utf-8\"")
         .body(Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "PrepareForConnection timed out")??;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -75,7 +81,9 @@ async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error
         )
         .body(hyper::Body::from(soap_body))?;
 
-    let response = client.request(request).await?;
+    let response = timeout(SOAP_TIMEOUT, client.request(request))
+        .await
+        .map_err(|_| "Play command timed out")??;
     let status = response.status();
     if !status.is_success() {
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -113,8 +121,11 @@ pub async fn stream_media(
         config.http_address, config.http_port, media_file.name
     );
 
-    // PrepareForConnection using the discovered ConnectionManager URL
-    prepare_connection(cm_control_url).await?;
+    // PrepareForConnection is optional in DLNA; many renderers don't support it.
+    // Log failures but don't abort streaming.
+    if let Err(e) = prepare_connection(cm_control_url).await {
+        eprintln!("PrepareForConnection skipped (not supported by device): {}", e);
+    }
 
     let client = hyper::Client::new();
 
@@ -175,7 +186,9 @@ pub async fn stream_media(
         )
         .body(hyper::Body::from(soap_body_set_uri))?;
 
-    let response_set_uri = client.request(request_set_uri).await?;
+    let response_set_uri = timeout(SOAP_TIMEOUT, client.request(request_set_uri))
+        .await
+        .map_err(|_| "SetAVTransportURI timed out")??;
     let status_set_uri = response_set_uri.status();
     if !status_set_uri.is_success() {
         let body_bytes = hyper::body::to_bytes(response_set_uri.into_body()).await?;
