@@ -27,7 +27,7 @@ jobs:
             asset_name: rustcast-linux-aarch64
             use_cross: true
 
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             artifact: rustcast
             asset_name: rustcast-macos-x86_64

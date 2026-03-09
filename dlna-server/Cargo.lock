@@ -138,22 +138,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
-name = "errno"
-version = "0.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33d852cb9b869c2a9b3df2f71a3074817f01e1844f839a144f5fcef059a4eb5d"
-dependencies = [
- "libc",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "fastrand"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
-
-[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,21 +148,6 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
-
-[[package]]
-name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "form_urlencoded"
@@ -400,16 +369,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-tls"
-version = "0.5.0"
+name = "hyper-rustls"
+version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
+checksum = "ec3efd23720e2049821a693cbc7e65ea87c72f1c58ff2f9522ff332b1491e590"
 dependencies = [
- "bytes",
+ "futures-util",
+ "http",
  "hyper",
- "native-tls",
+ "rustls",
  "tokio",
- "tokio-native-tls",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -603,12 +573,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
-name = "linux-raw-sys"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
-
-[[package]]
 name = "litemap"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -663,23 +627,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "native-tls"
-version = "0.2.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
-dependencies = [
- "libc",
- "log",
- "openssl",
- "openssl-probe",
- "openssl-sys",
- "schannel",
- "security-framework",
- "security-framework-sys",
- "tempfile",
-]
-
-[[package]]
 name = "object"
 version = "0.36.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -693,50 +640,6 @@ name = "once_cell"
 version = "1.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
-
-[[package]]
-name = "openssl"
-version = "0.10.72"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da"
-dependencies = [
- "bitflags 2.7.0",
- "cfg-if",
- "foreign-types",
- "libc",
- "once_cell",
- "openssl-macros",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "openssl-probe"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.107"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8288979acd84749c744a9014b4382d42b8f7b2592847b5afb2ed29e5d16ede07"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "parking_lot"
@@ -772,12 +675,6 @@ name = "pin-project-lite"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
-
-[[package]]
-name = "pkg-config"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "953ec861398dccce10c670dfeaf3ec4911ca479e9c02154b3a215178c5f566f2"
 
 [[package]]
 name = "prettyplease"
@@ -837,15 +734,15 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-tls",
+ "hyper-rustls",
  "ipnet",
  "js-sys",
  "log",
  "mime",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
+ "rustls",
  "rustls-pemfile",
  "serde",
  "serde_json",
@@ -853,13 +750,28 @@ dependencies = [
  "sync_wrapper",
  "system-configuration",
  "tokio",
- "tokio-native-tls",
+ "tokio-rustls",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "webpki-roots",
  "winreg",
+]
+
+[[package]]
+name = "ring"
+version = "0.17.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "getrandom 0.2.15",
+ "libc",
+ "untrusted",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -884,16 +796,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustix"
-version = "0.38.43"
+name = "rustls"
+version = "0.21.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78891ee6bf2340288408954ac787aa063d8e8817e9f53abb37c695c6d834ef6"
+checksum = "3f56a14d1f48b391359b22f731fd4bd7e43c97f3c50eee276f3aa09c94784d3e"
 dependencies = [
- "bitflags 2.7.0",
- "errno",
- "libc",
- "linux-raw-sys",
- "windows-sys 0.59.0",
+ "log",
+ "ring",
+ "rustls-webpki",
+ "sct",
 ]
 
 [[package]]
@@ -903,6 +814,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
  "base64",
+]
+
+[[package]]
+name = "rustls-webpki"
+version = "0.101.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
+dependencies = [
+ "ring",
+ "untrusted",
 ]
 
 [[package]]
@@ -918,41 +839,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
-name = "schannel"
-version = "0.1.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f29ebaa345f945cec9fbbc532eb307f0fdad8161f281b6369539c8d84876b3d"
-dependencies = [
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
-name = "security-framework"
-version = "2.11.1"
+name = "sct"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
+checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
 dependencies = [
- "bitflags 2.7.0",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49db231d56a190491cb4aeda9527f1ad45345af50b0851622a7adb8c03b01c32"
-dependencies = [
- "core-foundation-sys",
- "libc",
+ "ring",
+ "untrusted",
 ]
 
 [[package]]
@@ -1113,20 +1012,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tempfile"
-version = "3.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
-dependencies = [
- "cfg-if",
- "fastrand",
- "getrandom 0.2.15",
- "once_cell",
- "rustix",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1186,12 +1071,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-native-tls"
-version = "0.3.1"
+name = "tokio-rustls"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
+checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "native-tls",
+ "rustls",
  "tokio",
 ]
 
@@ -1252,6 +1137,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+name = "untrusted"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
 name = "url"
 version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1284,12 +1175,6 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "vcpkg"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "want"
@@ -1428,6 +1313,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki-roots"
+version = "0.25.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
+
+[[package]]
 name = "windows-sys"
 version = "0.48.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1441,15 +1332,6 @@ name = "windows-sys"
 version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "282be5f36a8ce781fad8c8ae18fa3f9beff57ec1b52cb3de0789201425d9a33d"
-dependencies = [
- "windows-targets 0.52.6",
-]
-
-[[package]]
-name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
 ]
