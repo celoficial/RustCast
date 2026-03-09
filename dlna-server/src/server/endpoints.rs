@@ -1,8 +1,8 @@
 use hyper::{Body, Request, Response, StatusCode};
 use serde_json::json;
+use std::io::SeekFrom;
 use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
-use std::io::SeekFrom;
 
 use crate::config::Config;
 use crate::media::manager::list_media_files;
@@ -138,7 +138,11 @@ async fn handle_media_file_request(
     let mime_type = get_mime_type(canonical.to_str().unwrap_or(""));
 
     // Parse Range header
-    let range_header = req.headers().get("range").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let range_header = req
+        .headers()
+        .get("range")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
 
     let (start, end, is_partial) = if let Some(ref range_str) = range_header {
         match parse_range(range_str, file_size) {
@@ -168,9 +172,15 @@ async fn handle_media_file_request(
             .status(StatusCode::PARTIAL_CONTENT)
             .header("Content-Type", mime_type)
             .header("Content-Length", content_length.to_string())
-            .header("Content-Range", format!("bytes {}-{}/{}", start, end, file_size))
+            .header(
+                "Content-Range",
+                format!("bytes {}-{}/{}", start, end, file_size),
+            )
             .header("Accept-Ranges", "bytes")
-            .header("Content-Disposition", format!("inline; filename=\"{}\"", media_name))
+            .header(
+                "Content-Disposition",
+                format!("inline; filename=\"{}\"", media_name),
+            )
             .body(Body::from(content))
             .unwrap())
     } else {
@@ -179,7 +189,10 @@ async fn handle_media_file_request(
             .header("Content-Type", mime_type)
             .header("Content-Length", content_length.to_string())
             .header("Accept-Ranges", "bytes")
-            .header("Content-Disposition", format!("inline; filename=\"{}\"", media_name))
+            .header(
+                "Content-Disposition",
+                format!("inline; filename=\"{}\"", media_name),
+            )
             .body(Body::from(content))
             .unwrap())
     }

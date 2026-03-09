@@ -46,7 +46,9 @@ pub struct Service {
 }
 
 /// Parses XML into a DeviceDescription
-pub fn parse_device_description(xml: &str) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
+pub fn parse_device_description(
+    xml: &str,
+) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     let description: DeviceDescription = from_str(xml)?;
     Ok(description)
 }
@@ -66,9 +68,16 @@ pub fn extract_base_url(location: &str) -> String {
 
 /// Finds a UPnP service control URL by matching the service type string.
 /// Returns the absolute URL (base_url + controlURL).
-pub fn find_control_url(desc: &DeviceDescription, service_type_fragment: &str, base_url: &str) -> Option<String> {
+pub fn find_control_url(
+    desc: &DeviceDescription,
+    service_type_fragment: &str,
+    base_url: &str,
+) -> Option<String> {
     let service_list = desc.device.service_list.as_ref()?;
-    let service = service_list.services.iter().find(|s| s.service_type.contains(service_type_fragment))?;
+    let service = service_list
+        .services
+        .iter()
+        .find(|s| s.service_type.contains(service_type_fragment))?;
     let control_url = service.control_url.trim();
     if control_url.starts_with("http://") || control_url.starts_with("https://") {
         Some(control_url.to_string())
@@ -78,25 +87,37 @@ pub fn find_control_url(desc: &DeviceDescription, service_type_fragment: &str, b
 }
 
 /// Fetches and parses the device description XML without printing device info.
-pub async fn fetch_device_description_quiet(location: &str) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
+pub async fn fetch_device_description_quiet(
+    location: &str,
+) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     let client = Client::new();
     let response = client.get(location).send().await?;
     if !response.status().is_success() {
-        return Err(format!("Error fetching device description. Status: {}", response.status()).into());
+        return Err(format!(
+            "Error fetching device description. Status: {}",
+            response.status()
+        )
+        .into());
     }
     let xml = response.text().await?;
     parse_device_description(&xml)
 }
 
 /// Fetches and parses the device description XML from the given location URL.
-pub async fn fetch_device_description(location: &str) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
+pub async fn fetch_device_description(
+    location: &str,
+) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     println!("Fetching device description from: {}", location);
 
     let client = Client::new();
     let response = client.get(location).send().await?;
 
     if !response.status().is_success() {
-        return Err(format!("Error fetching device description. Status: {}", response.status()).into());
+        return Err(format!(
+            "Error fetching device description. Status: {}",
+            response.status()
+        )
+        .into());
     }
 
     let xml = response.text().await?;

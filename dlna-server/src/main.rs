@@ -1,20 +1,24 @@
-use std::path::Path;
-use std::collections::HashSet;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use futures::future::join_all;
+use std::collections::HashSet;
+use std::path::Path;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 mod config;
 mod discovery;
-mod server;
 mod media;
+mod server;
 
 use config::Config;
 use discovery::advertise::{send_notify_byebye, start_ssdp_advertiser};
+use discovery::device::{
+    extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url,
+};
 use discovery::discovery::discover_ssdp;
-use discovery::device::{extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url};
-use server::http_server::start_http_server;
 use media::manager::list_media_files;
-use media::stream::{stream_media, pause_media, resume_media, stop_media, seek_media, get_transport_state};
+use media::stream::{
+    get_transport_state, pause_media, resume_media, seek_media, stop_media, stream_media,
+};
+use server::http_server::start_http_server;
 
 /// Looks for a `.srt` subtitle file alongside the media file (same base name).
 /// Returns the HTTP URL the renderer should use to fetch it, or None if not found.
@@ -26,7 +30,10 @@ fn find_subtitle(media_path: &str, http_address: &str, http_port: u16) -> Option
         let candidate = dir.join(format!("{}.{}", stem, ext));
         if candidate.exists() {
             let filename = candidate.file_name()?.to_str()?.to_string();
-            return Some(format!("http://{}:{}/media/{}", http_address, http_port, filename));
+            return Some(format!(
+                "http://{}:{}/media/{}",
+                http_address, http_port, filename
+            ));
         }
     }
     None
@@ -70,7 +77,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting the {} server", config.friendly_name);
 
     if !Path::new(&config.media_directory).exists() {
-        eprintln!("Error: The configured media directory '{}' does not exist.", config.media_directory);
+        eprintln!(
+            "Error: The configured media directory '{}' does not exist.",
+            config.media_directory
+        );
         return Err("Invalid media directory".into());
     }
 
@@ -123,9 +133,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nMediaRenderer devices found:");
     for (i, (device, desc_result)) in devices.iter().zip(desc_results.iter()).enumerate() {
-        let location = device.get("LOCATION").map(|s| s.as_str()).unwrap_or("unknown");
+        let location = device
+            .get("LOCATION")
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
         let name = match desc_result {
-            Some(Ok(desc)) if !desc.device.friendly_name.is_empty() => desc.device.friendly_name.as_str(),
+            Some(Ok(desc)) if !desc.device.friendly_name.is_empty() => {
+                desc.device.friendly_name.as_str()
+            }
             _ => location,
         };
         println!("{}) {}  ({})", i + 1, name, location);
@@ -175,7 +190,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // List media files
     let media_files = list_media_files(&config.media_directory);
     if media_files.is_empty() {
-        println!("No media files found in the directory: {}", config.media_directory);
+        println!(
+            "No media files found in the directory: {}",
+            config.media_directory
+        );
         server_task.abort();
         return Ok(());
     }
@@ -212,14 +230,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
-        println!("\n[{}/{}] Starting: {}", idx + 1, playlist.len(), media_file.name);
+        println!(
+            "\n[{}/{}] Starting: {}",
+            idx + 1,
+            playlist.len(),
+            media_file.name
+        );
 
         let subtitle_url = find_subtitle(&media_file.path, &config.http_address, config.http_port);
         if let Some(ref url) = subtitle_url {
             println!("Subtitle found: {}", url);
         }
 
-        if let Err(e) = stream_media(&config, &av_control_url, &cm_control_url, media_file, subtitle_url.as_deref()).await {
+        if let Err(e) = stream_media(
+            &config,
+            &av_control_url,
+            &cm_control_url,
+            media_file,
+            subtitle_url.as_deref(),
+        )
+        .await
+        {
             eprintln!("Streaming error: {}", e);
             continue;
         }

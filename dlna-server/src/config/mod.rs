@@ -18,11 +18,13 @@ pub struct Config {
 /// which local interface the OS would use to reach an external address.
 /// No packet is actually sent.
 fn detect_local_ip() -> String {
-    let socket = std::net::UdpSocket::bind("0.0.0.0:0")
-        .expect("Failed to bind UDP socket for IP detection");
-    socket.connect("8.8.8.8:80")
+    let socket =
+        std::net::UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket for IP detection");
+    socket
+        .connect("8.8.8.8:80")
         .expect("Failed to connect UDP socket for IP detection");
-    socket.local_addr()
+    socket
+        .local_addr()
         .map(|addr| addr.ip().to_string())
         .unwrap_or_else(|_| "127.0.0.1".to_string())
 }
@@ -45,10 +47,8 @@ impl Config {
                 .unwrap_or_else(|_| "1900".to_string())
                 .parse()
                 .expect("MULTICAST_PORT must be a valid number"),
-            media_directory: env::var("MEDIA_DIRECTORY")
-                .unwrap_or_else(|_| "./media".to_string()),
-            udn: env::var("UDN")
-                .unwrap_or_else(|_| format!("uuid:{}", Uuid::new_v4())),
+            media_directory: env::var("MEDIA_DIRECTORY").unwrap_or_else(|_| "./media".to_string()),
+            udn: env::var("UDN").unwrap_or_else(|_| format!("uuid:{}", Uuid::new_v4())),
         }
     }
 }

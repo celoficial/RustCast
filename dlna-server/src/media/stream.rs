@@ -1,14 +1,14 @@
-use hyper::{Body, Client, Method, Request};
-use crate::config::Config;
 use super::manager::MediaFile;
+use crate::config::Config;
+use hyper::{Body, Client, Method, Request};
 
 /// Escapes special XML characters to prevent injection.
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
-     .replace('\'', "&apos;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
 
 /// Sends the PrepareForConnection SOAP action to the device's ConnectionManager.
@@ -31,14 +31,21 @@ pub async fn prepare_connection(cm_control_url: &str) -> Result<(), Box<dyn std:
     let request = Request::builder()
         .method(Method::POST)
         .uri(cm_control_url)
-        .header("SOAPACTION", r#""urn:schemas-upnp-org:service:ConnectionManager:1#PrepareForConnection""#)
+        .header(
+            "SOAPACTION",
+            r#""urn:schemas-upnp-org:service:ConnectionManager:1#PrepareForConnection""#,
+        )
         .header("Content-Type", "text/xml; charset=\"utf-8\"")
         .body(Body::from(soap_body))?;
 
     let response = client.request(request).await?;
 
     if !response.status().is_success() {
-        return Err(format!("Failed to configure connection. Status: {}", response.status()).into());
+        return Err(format!(
+            "Failed to configure connection. Status: {}",
+            response.status()
+        )
+        .into());
     }
 
     println!("Connection configured successfully!");
@@ -62,7 +69,10 @@ async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Play\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Play\"",
+        )
         .body(hyper::Body::from(soap_body))?;
 
     let response = client.request(request).await?;
@@ -73,7 +83,8 @@ async fn send_play(av_control_url: &str) -> Result<(), Box<dyn std::error::Error
             "Failed to start playback. Status: {}. Response: {}",
             status,
             String::from_utf8_lossy(&body_bytes)
-        ).into());
+        )
+        .into());
     }
     Ok(())
 }
@@ -148,7 +159,8 @@ pub async fn stream_media(
         </u:SetAVTransportURI>
     </s:Body>
 </s:Envelope>"#,
-        xml_escape(&media_url), metadata_escaped
+        xml_escape(&media_url),
+        metadata_escaped
     );
 
     println!("Sending SetAVTransportURI command to {}", av_control_url);
@@ -157,7 +169,10 @@ pub async fn stream_media(
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"",
+        )
         .body(hyper::Body::from(soap_body_set_uri))?;
 
     let response_set_uri = client.request(request_set_uri).await?;
@@ -168,7 +183,8 @@ pub async fn stream_media(
             "Failed to configure transport. Status: {}. Response: {}",
             status_set_uri,
             String::from_utf8_lossy(&body_bytes)
-        ).into());
+        )
+        .into());
     }
 
     println!("Media configured successfully! Sending Play command...");
@@ -199,7 +215,10 @@ pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error:
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Pause\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Pause\"",
+        )
         .body(hyper::Body::from(soap_body))?;
 
     let response = client.request(request).await?;
@@ -210,7 +229,8 @@ pub async fn pause_media(av_control_url: &str) -> Result<(), Box<dyn std::error:
             "Failed to pause. Status: {}. Response: {}",
             status,
             String::from_utf8_lossy(&body_bytes)
-        ).into());
+        )
+        .into());
     }
     Ok(())
 }
@@ -231,7 +251,10 @@ pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Stop\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Stop\"",
+        )
         .body(hyper::Body::from(soap_body))?;
 
     let response = client.request(request).await?;
@@ -242,13 +265,17 @@ pub async fn stop_media(av_control_url: &str) -> Result<(), Box<dyn std::error::
             "Failed to stop. Status: {}. Response: {}",
             status,
             String::from_utf8_lossy(&body_bytes)
-        ).into());
+        )
+        .into());
     }
     Ok(())
 }
 
 /// Seeks to a position in the current media. Position format: "HH:MM:SS"
-pub async fn seek_media(av_control_url: &str, position: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn seek_media(
+    av_control_url: &str,
+    position: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let soap_body = format!(
         r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
@@ -268,7 +295,10 @@ pub async fn seek_media(av_control_url: &str, position: &str) -> Result<(), Box<
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#Seek\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#Seek\"",
+        )
         .body(hyper::Body::from(soap_body))?;
 
     let response = client.request(request).await?;
@@ -279,14 +309,17 @@ pub async fn seek_media(av_control_url: &str, position: &str) -> Result<(), Box<
             "Failed to seek. Status: {}. Response: {}",
             status,
             String::from_utf8_lossy(&body_bytes)
-        ).into());
+        )
+        .into());
     }
     Ok(())
 }
 
 /// Gets the current transport state from the device.
 /// Returns state string: "PLAYING", "PAUSED_PLAYBACK", "STOPPED", or "UNKNOWN".
-pub async fn get_transport_state(av_control_url: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub async fn get_transport_state(
+    av_control_url: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
     let soap_body = r#"<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
     <s:Body>
@@ -301,7 +334,10 @@ pub async fn get_transport_state(av_control_url: &str) -> Result<String, Box<dyn
         .method(hyper::Method::POST)
         .uri(av_control_url)
         .header("Content-Type", "text/xml; charset=utf-8")
-        .header("SOAPAction", "\"urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo\"")
+        .header(
+            "SOAPAction",
+            "\"urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo\"",
+        )
         .body(hyper::Body::from(soap_body))?;
 
     let response = client.request(request).await?;

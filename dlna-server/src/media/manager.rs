@@ -1,5 +1,5 @@
-use std::fs;
 use serde::Serialize;
+use std::fs;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MediaFile {

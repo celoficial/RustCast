@@ -1,8 +1,8 @@
 // src/server/mod.rs
-use hyper::{Body, Request, Server};
-use hyper::service::{make_service_fn, service_fn};
-use crate::server::endpoints::handle_request;
 use crate::config::Config;
+use crate::server::endpoints::handle_request;
+use hyper::service::{make_service_fn, service_fn};
+use hyper::{Body, Request, Server};
 use std::sync::Arc;
 
 pub async fn start_http_server(port: u16, config: Config) {
