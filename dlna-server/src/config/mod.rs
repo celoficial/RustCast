@@ -14,13 +14,25 @@ pub struct Config {
     pub udn: String,
 }
 
+/// Detects the machine's outbound LAN IP by opening a UDP socket and checking
+/// which local interface the OS would use to reach an external address.
+/// No packet is actually sent.
+fn detect_local_ip() -> String {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0")
+        .expect("Failed to bind UDP socket for IP detection");
+    socket.connect("8.8.8.8:80")
+        .expect("Failed to connect UDP socket for IP detection");
+    socket.local_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|_| "127.0.0.1".to_string())
+}
+
 impl Config {
     pub fn from_env() -> Self {
         dotenv().ok();
 
         Config {
-            http_address: env::var("HTTP_ADDRESS")
-                .unwrap_or_else(|_| "localhost".to_string()),
+            http_address: detect_local_ip(),
             http_port: env::var("HTTP_PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()

@@ -39,7 +39,7 @@ fn handle_description_request(config: &Config) -> Result<Response<Body>, hyper::
         </specVersion>
         <device>
             <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
-            <friendlyName>RustCast Server</friendlyName>
+            <friendlyName>{}</friendlyName>
             <manufacturer>Understake</manufacturer>
             <manufacturerURL>https://github.com/celoficial</manufacturerURL>
             <modelName>DLNA Server v1</modelName>
@@ -48,7 +48,7 @@ fn handle_description_request(config: &Config) -> Result<Response<Body>, hyper::
             <UDN>{}</UDN>
         </device>
     </root>"#,
-        config.udn
+        config.friendly_name, config.udn
     );
 
     Ok(Response::builder()

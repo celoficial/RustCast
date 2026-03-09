@@ -77,6 +77,17 @@ pub fn find_control_url(desc: &DeviceDescription, service_type_fragment: &str, b
     }
 }
 
+/// Fetches and parses the device description XML without printing device info.
+pub async fn fetch_device_description_quiet(location: &str) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
+    let client = Client::new();
+    let response = client.get(location).send().await?;
+    if !response.status().is_success() {
+        return Err(format!("Error fetching device description. Status: {}", response.status()).into());
+    }
+    let xml = response.text().await?;
+    parse_device_description(&xml)
+}
+
 /// Fetches and parses the device description XML from the given location URL.
 pub async fn fetch_device_description(location: &str) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     println!("Fetching device description from: {}", location);
