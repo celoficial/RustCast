@@ -2,7 +2,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_xml_rs::from_str;
 
-// Estruturas para parsing do XML
+use crate::discovery::ssdp::{rediscover_by_usn, SsdpDevice};
+
 #[derive(Debug, Deserialize, Default)]
 pub struct DeviceDescription {
     #[serde(rename = "device", default)]
@@ -13,15 +14,6 @@ pub struct DeviceDescription {
 pub struct Device {
     #[serde(rename = "friendlyName", default)]
     pub friendly_name: String,
-
-    #[serde(rename = "manufacturer", default)]
-    pub manufacturer: String,
-
-    #[serde(rename = "modelName", default)]
-    pub model_name: String,
-
-    #[serde(rename = "UDN", default)]
-    pub udn: String,
 
     #[serde(rename = "serviceList", default)]
     pub service_list: Option<ServiceList>,
@@ -40,23 +32,18 @@ pub struct Service {
 
     #[serde(rename = "controlURL", default)]
     pub control_url: String,
-
-    #[serde(rename = "SCPDURL", default)]
-    pub scpd_url: String,
 }
 
-/// Parses XML into a DeviceDescription
+/// Parses a UPnP device description XML string.
 pub fn parse_device_description(
     xml: &str,
 ) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
-    let description: DeviceDescription = from_str(xml)?;
-    Ok(description)
+    Ok(from_str(xml)?)
 }
 
 /// Extracts the base URL (scheme + host + port) from a full URL.
-/// e.g. "http://192.168.1.100:52235/description.xml" → "http://192.168.1.100:52235"
+/// e.g. `"http://192.168.1.100:52235/description.xml"` → `"http://192.168.1.100:52235"`
 pub fn extract_base_url(location: &str) -> String {
-    // Find the third slash (end of scheme://host:port)
     if let Some(scheme_end) = location.find("://") {
         let after_scheme = &location[scheme_end + 3..];
         if let Some(path_start) = after_scheme.find('/') {
@@ -67,7 +54,7 @@ pub fn extract_base_url(location: &str) -> String {
 }
 
 /// Finds a UPnP service control URL by matching the service type string.
-/// Returns the absolute URL (base_url + controlURL).
+/// Returns the absolute URL (base_url + controlURL), or None if not found.
 pub fn find_control_url(
     desc: &DeviceDescription,
     service_type_fragment: &str,
@@ -86,17 +73,30 @@ pub fn find_control_url(
     }
 }
 
-/// Fetches and parses the device description XML without printing device info.
-pub async fn fetch_device_description_quiet(
+/// Like `find_control_url` but falls back to `base_url + default_path` if the service
+/// is not found in the device description. Eliminates the repeated unwrap_or_else pattern.
+pub fn find_control_url_with_fallback(
+    desc: &DeviceDescription,
+    service_type_fragment: &str,
+    base_url: &str,
+    default_path: &str,
+) -> String {
+    find_control_url(desc, service_type_fragment, base_url)
+        .unwrap_or_else(|| format!("{}{}", base_url, default_path))
+}
+
+/// Fetches and parses the device description XML from the given location URL.
+pub async fn fetch_device_description(
     location: &str,
 ) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
     let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(10))
         .build()?;
     let response = client.get(location).send().await?;
     if !response.status().is_success() {
         return Err(format!(
-            "Error fetching device description. Status: {}",
+            "Error fetching device description from {}: HTTP {}",
+            location,
             response.status()
         )
         .into());
@@ -105,43 +105,25 @@ pub async fn fetch_device_description_quiet(
     parse_device_description(&xml)
 }
 
-/// Fetches and parses the device description XML from the given location URL.
-pub async fn fetch_device_description(
-    location: &str,
-) -> Result<DeviceDescription, Box<dyn std::error::Error>> {
-    println!("Fetching device description from: {}", location);
+/// Attempts to rediscover a device by USN after it went offline, then re-fetches its
+/// description and returns updated `(av_control_url, cm_control_url)` on success.
+pub async fn reconnect_device(
+    multicast_addr: &str,
+    multicast_port: u16,
+    usn: &str,
+) -> Option<(String, String)> {
+    let device: SsdpDevice = rediscover_by_usn(multicast_addr, multicast_port, usn).await?;
+    let desc = fetch_device_description(&device.location).await.ok()?;
+    let base = extract_base_url(&device.location);
 
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()?;
-    let response = client.get(location).send().await?;
+    let av =
+        find_control_url_with_fallback(&desc, "AVTransport", &base, "/upnp/control/AVTransport1");
+    let cm = find_control_url_with_fallback(
+        &desc,
+        "ConnectionManager",
+        &base,
+        "/upnp/control/ConnectionManager1",
+    );
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "Error fetching device description. Status: {}",
-            response.status()
-        )
-        .into());
-    }
-
-    let xml = response.text().await?;
-
-    let description = parse_device_description(&xml)?;
-
-    println!("\nDevice Information:");
-    println!("Name: {}", description.device.friendly_name);
-    println!("Manufacturer: {}", description.device.manufacturer);
-    println!("Model: {}", description.device.model_name);
-    println!("UDN: {}\n", description.device.udn);
-
-    if let Some(service_list) = &description.device.service_list {
-        println!("Available services:");
-        for service in &service_list.services {
-            println!(" - Type: {}", service.service_type);
-            println!("   Control: {}", service.control_url);
-            println!("   SCPD: {}\n", service.scpd_url);
-        }
-    }
-
-    Ok(description)
+    Some((av, cm))
 }

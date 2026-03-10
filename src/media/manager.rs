@@ -67,3 +67,19 @@ fn collect_media(root: &Path, current: &Path, results: &mut Vec<MediaFile>) {
 fn is_supported_format(ext: &str) -> bool {
     matches!(ext.to_lowercase().as_str(), "mp4" | "mkv" | "avi" | "mp3")
 }
+
+pub fn get_mime_type(file_path: &str) -> &'static str {
+    let ext = std::path::Path::new(file_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    match ext.to_lowercase().as_str() {
+        "mp4" => "video/mp4",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "mp3" => "audio/mpeg",
+        "srt" => "application/x-subrip",
+        _ => "application/octet-stream",
+    }
+}

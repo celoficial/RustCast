@@ -5,20 +5,23 @@ use tokio::time::{interval, Duration};
 const NOTIFY_INTERVAL_SECS: u64 = 30;
 const CACHE_MAX_AGE: u32 = 1800;
 
-/// Builds the three NOTIFY ssdp:alive messages required for a UPnP MediaServer:
+/// Returns the three (NT, USN) pairs for a UPnP MediaServer announcement:
 ///   1. upnp:rootdevice
 ///   2. uuid:<UDN>
 ///   3. urn:schemas-upnp-org:device:MediaServer:1
-fn build_alive_messages(location: &str, udn: &str, multicast_host: &str) -> Vec<String> {
-    let entries = [
+fn notify_entries(udn: &str) -> [(&str, String); 3] {
+    [
         ("upnp:rootdevice", format!("{}::upnp:rootdevice", udn)),
         (udn, udn.to_string()),
         (
             "urn:schemas-upnp-org:device:MediaServer:1",
             format!("{}::urn:schemas-upnp-org:device:MediaServer:1", udn),
         ),
-    ];
-    entries
+    ]
+}
+
+fn build_alive_messages(location: &str, udn: &str, multicast_host: &str) -> Vec<String> {
+    notify_entries(udn)
         .iter()
         .map(|(nt, usn)| {
             format!(
@@ -37,17 +40,8 @@ fn build_alive_messages(location: &str, udn: &str, multicast_host: &str) -> Vec<
         .collect()
 }
 
-/// Builds the three NOTIFY ssdp:byebye messages to announce the server is going offline.
 fn build_byebye_messages(udn: &str, multicast_host: &str) -> Vec<String> {
-    let entries = [
-        ("upnp:rootdevice", format!("{}::upnp:rootdevice", udn)),
-        (udn, udn.to_string()),
-        (
-            "urn:schemas-upnp-org:device:MediaServer:1",
-            format!("{}::urn:schemas-upnp-org:device:MediaServer:1", udn),
-        ),
-    ];
-    entries
+    notify_entries(udn)
         .iter()
         .map(|(nt, usn)| {
             format!(

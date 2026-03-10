@@ -5,8 +5,8 @@ use std::path::Path;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 use crate::config::Config;
+use crate::media::manager::get_mime_type;
 use crate::media::manager::list_media_files;
-use crate::media::stream::get_mime_type;
 
 /// Size of each chunk read from disk and sent over the network.
 /// 256 KB balances disk I/O efficiency with renderer buffer granularity
@@ -37,8 +37,7 @@ pub async fn handle_request(
         "/media" => handle_media_list_request(config),
         _ => {
             if let Some(media_name) = uri_path.strip_prefix("/media/") {
-                let media_name = media_name.to_string();
-                handle_media_file_request(&req, &media_name, config).await
+                handle_media_file_request(&req, media_name, config).await
             } else {
                 respond_not_found()
             }

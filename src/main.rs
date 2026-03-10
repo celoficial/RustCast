@@ -1,137 +1,38 @@
 use futures::future::join_all;
-use std::collections::HashSet;
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 mod config;
 mod discovery;
+mod dlna;
 mod media;
 mod server;
+mod soap;
+mod tui;
 
 use config::Config;
 use discovery::advertise::{send_notify_byebye, start_ssdp_advertiser};
 use discovery::device::{
-    extract_base_url, fetch_device_description, fetch_device_description_quiet, find_control_url,
+    extract_base_url, fetch_device_description, find_control_url_with_fallback, reconnect_device,
 };
-use discovery::ssdp::{discover_ssdp, rediscover_by_usn};
+use discovery::health::{spawn_poll_task, PollSignal};
+use discovery::ssdp::discover_ssdp;
+use discovery::ssdp::SsdpDevice;
+use media::finder::find_subtitle;
 use media::manager::{list_media_files, MediaFile};
-use media::stream::{
-    get_transport_state, new_soap_client, pause_media, resume_media, seek_media, stop_media,
-    stream_media,
-};
+use media::stream::stream_media;
 use server::http_server::start_http_server;
-
-/// Signal sent by the transport-state poll task to the control loop.
-#[derive(Clone, PartialEq)]
-enum PollSignal {
-    Running,
-    Paused,  // TV paused itself via remote
-    Resumed, // TV resumed itself via remote
-    Stopped, // playback ended naturally or TV pressed stop
-    DeviceOffline,
-}
-
-/// What to do after a playlist ends or is stopped.
-enum SessionAction {
-    ReselectMedia,  // same device, pick new files
-    ReselectDevice, // go back to device list
-    Rescan,         // full SSDP rediscovery
-    Quit,
-}
-
-/// Why a per-track control loop exited.
-enum TrackExit {
-    NextTrack,    // advance playlist ([n] or auto-advance)
-    StopPlaylist, // stop here, show post-playlist menu ([s])
-    Quit,         // exit the program ([q] or stdin closed)
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-/// Looks for a `.srt` subtitle alongside the media file and returns its HTTP URL.
-fn find_subtitle(media_file: &MediaFile, http_address: &str, http_port: u16) -> Option<String> {
-    let path = Path::new(&media_file.path);
-    let stem = path.file_stem()?.to_str()?;
-    let dir = path.parent()?;
-    for ext in &["srt", "SRT"] {
-        let candidate = dir.join(format!("{}.{}", stem, ext));
-        if candidate.exists() {
-            let parent_rel = Path::new(&media_file.relative_path)
-                .parent()
-                .map(|p| p.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_default();
-            let filename = candidate.file_name()?.to_string_lossy().to_string();
-            let rel = if parent_rel.is_empty() {
-                filename
-            } else {
-                format!("{}/{}", parent_rel, filename)
-            };
-            return Some(format!(
-                "http://{}:{}/media/{}",
-                http_address, http_port, rel
-            ));
-        }
-    }
-    None
-}
-
-/// Parses a multi-select string into 0-based indices.
-/// Supports: "1", "1,3,5", "2-4", "all"
-fn parse_selection(input: &str, count: usize) -> Vec<usize> {
-    let input = input.trim().to_lowercase();
-    if input == "all" {
-        return (0..count).collect();
-    }
-    let mut indices = Vec::new();
-    for part in input.split(',') {
-        let part = part.trim();
-        if let Some(dash_pos) = part.find('-') {
-            let start: usize = part[..dash_pos].trim().parse().unwrap_or(0);
-            let end: usize = part[dash_pos + 1..].trim().parse().unwrap_or(0);
-            if start > 0 && end >= start {
-                for i in start..=end {
-                    if i <= count {
-                        indices.push(i - 1);
-                    }
-                }
-            }
-        } else if let Ok(n) = part.parse::<usize>() {
-            if n > 0 && n <= count {
-                indices.push(n - 1);
-            }
-        }
-    }
-    let mut seen = HashSet::new();
-    indices.retain(|x| seen.insert(*x));
-    indices
-}
-
-/// Asks the user what to do after a playlist ends or is stopped.
-async fn ask_what_next(
-    stdin_rx: &mut tokio::sync::mpsc::UnboundedReceiver<String>,
-) -> SessionAction {
-    loop {
-        println!("\nWhat would you like to do?");
-        println!("  [m] Select new media (same device)");
-        println!("  [d] Choose a different device");
-        println!("  [r] Rescan for devices");
-        println!("  [q] Quit");
-        let input = stdin_rx.recv().await.unwrap_or_default();
-        match input.trim() {
-            "m" | "M" => return SessionAction::ReselectMedia,
-            "d" | "D" => return SessionAction::ReselectDevice,
-            "r" | "R" => return SessionAction::Rescan,
-            "q" | "Q" => return SessionAction::Quit,
-            _ => println!("Enter m, d, r, or q."),
-        }
-    }
-}
+use soap::new_soap_client;
+use tui::{ask_what_next, parse_selection, SessionAction, TrackExit};
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::from_env();
+    let config = Config::from_env().unwrap_or_else(|e| {
+        eprintln!("Configuration error: {}", e);
+        std::process::exit(1);
+    });
     println!("Starting {}...", config.friendly_name);
 
     if !Path::new(&config.media_directory).exists() {
@@ -167,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut need_device = true;
     let mut av_control_url = String::new();
     let mut cm_control_url = String::new();
-    let mut selected_usn: Option<String> = None;
+    let mut selected_usn = String::new();
 
     // ── session loop ──────────────────────────────────────────────────────────
     'session: loop {
@@ -196,13 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 let desc_futures = devices.iter().map(|d| {
-                    let loc = d.get("LOCATION").cloned();
-                    async move {
-                        match loc {
-                            Some(l) => Some(fetch_device_description_quiet(&l).await),
-                            None => None,
-                        }
-                    }
+                    let loc = d.location.clone();
+                    async move { fetch_device_description(&loc).await }
                 });
                 let desc_results = join_all(desc_futures).await;
                 break (devices, desc_results);
@@ -210,15 +106,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("\nDevices found:");
             for (i, (device, desc)) in devices.iter().zip(desc_results.iter()).enumerate() {
-                let location = device
-                    .get("LOCATION")
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown");
                 let name = match desc {
-                    Some(Ok(d)) if !d.device.friendly_name.is_empty() => {
-                        d.device.friendly_name.as_str()
-                    }
-                    _ => location,
+                    Ok(d) if !d.device.friendly_name.is_empty() => d.device.friendly_name.as_str(),
+                    _ => device.location.as_str(),
                 };
                 println!("  {}) {}", i + 1, name);
             }
@@ -234,20 +124,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue 'session;
             }
 
-            let selected_device = &devices[device_choice - 1];
-            let selected_location = match selected_device.get("LOCATION") {
-                Some(l) => l.clone(),
-                None => {
-                    eprintln!("Selected device has no LOCATION — rescanning.");
-                    continue 'session;
-                }
-            };
-
-            selected_usn = selected_device.get("USN").cloned();
+            let selected_device: &SsdpDevice = &devices[device_choice - 1];
+            selected_usn = selected_device.usn.clone();
 
             let description = match desc_results.into_iter().nth(device_choice - 1) {
-                Some(Some(Ok(desc))) => desc,
-                _ => match fetch_device_description(&selected_location).await {
+                Some(Ok(desc)) => desc,
+                _ => match fetch_device_description(&selected_device.location).await {
                     Ok(desc) => desc,
                     Err(e) => {
                         eprintln!("Error fetching device info: {} — rescanning.", e);
@@ -256,14 +138,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             };
 
-            let base_url = extract_base_url(&selected_location);
-            av_control_url = find_control_url(&description, "AVTransport", &base_url)
-                .unwrap_or_else(|| format!("{}/upnp/control/AVTransport1", base_url));
-            cm_control_url = find_control_url(&description, "ConnectionManager", &base_url)
-                .unwrap_or_else(|| format!("{}/upnp/control/ConnectionManager1", base_url));
+            let base_url = extract_base_url(&selected_device.location);
+            av_control_url = find_control_url_with_fallback(
+                &description,
+                "AVTransport",
+                &base_url,
+                "/upnp/control/AVTransport1",
+            );
+            cm_control_url = find_control_url_with_fallback(
+                &description,
+                "ConnectionManager",
+                &base_url,
+                "/upnp/control/ConnectionManager1",
+            );
 
             let display_name = if description.device.friendly_name.is_empty() {
-                selected_location.as_str()
+                selected_device.location.as_str()
             } else {
                 description.device.friendly_name.as_str()
             };
@@ -350,46 +240,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Streaming.");
             println!("Controls: [p] Pause/Resume  [s] Stop & menu  [n] Next  [f] Seek  [q] Quit");
 
-            // Poll task — detects state transitions and signals the control loop
-            const OFFLINE_THRESHOLD: u32 = 3;
-            let (poll_tx, mut poll_rx) = tokio::sync::watch::channel(PollSignal::Running);
-            let poll_client = soap_client.clone();
-            let av_url = av_control_url.clone();
-            let poll_task = tokio::spawn(async move {
-                let mut consecutive_errors: u32 = 0;
-                let mut last_state = String::from("PLAYING");
-                loop {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                    match get_transport_state(&poll_client, &av_url).await {
-                        Ok(state) if state == "STOPPED" => {
-                            let _ = poll_tx.send(PollSignal::Stopped);
-                            break;
-                        }
-                        Ok(state) => {
-                            consecutive_errors = 0;
-                            if state != last_state {
-                                if state == "PAUSED_PLAYBACK" {
-                                    let _ = poll_tx.send(PollSignal::Paused);
-                                } else if state == "PLAYING" && last_state == "PAUSED_PLAYBACK" {
-                                    let _ = poll_tx.send(PollSignal::Resumed);
-                                }
-                                last_state = state;
-                            }
-                        }
-                        Err(e) => {
-                            consecutive_errors += 1;
-                            eprintln!(
-                                "[poll] error ({}/{}): {}",
-                                consecutive_errors, OFFLINE_THRESHOLD, e
-                            );
-                            if consecutive_errors >= OFFLINE_THRESHOLD {
-                                let _ = poll_tx.send(PollSignal::DeviceOffline);
-                                break;
-                            }
-                        }
-                    }
-                }
-            });
+            let (poll_task, mut poll_rx) =
+                spawn_poll_task(soap_client.clone(), av_control_url.clone());
 
             // Control loop
             'control: loop {
@@ -398,7 +250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let cmd = match cmd {
                             Some(c) => c,
                             None => {
-                                stop_media(&soap_client, &av_control_url).await.ok();
+                                dlna::av_transport::stop(&soap_client, &av_control_url).await.ok();
                                 poll_task.abort();
                                 track_exit = TrackExit::Quit;
                                 break 'control;
@@ -406,15 +258,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         };
                         match cmd.trim() {
                             "p" => {
-                                match get_transport_state(&soap_client, &av_control_url).await {
+                                match dlna::av_transport::get_transport_state(&soap_client, &av_control_url).await {
                                     Ok(s) if s == "PAUSED_PLAYBACK" => {
-                                        match resume_media(&soap_client, &av_control_url).await {
+                                        match dlna::av_transport::play(&soap_client, &av_control_url).await {
                                             Ok(()) => println!("Resumed."),
                                             Err(e) => eprintln!("Resume failed: {}", e),
                                         }
                                     }
                                     Ok(s) if s == "PLAYING" => {
-                                        match pause_media(&soap_client, &av_control_url).await {
+                                        match dlna::av_transport::pause(&soap_client, &av_control_url).await {
                                             Ok(()) => println!("Paused."),
                                             Err(e) => eprintln!("Pause failed: {}", e),
                                         }
@@ -424,7 +276,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                             "s" => {
-                                stop_media(&soap_client, &av_control_url).await.ok();
+                                dlna::av_transport::stop(&soap_client, &av_control_url).await.ok();
                                 poll_task.abort();
                                 track_exit = TrackExit::StopPlaylist;
                                 break 'control;
@@ -432,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "f" => {
                                 println!("Seek position (HH:MM:SS):");
                                 if let Some(pos) = stdin_rx.recv().await {
-                                    match seek_media(
+                                    match dlna::av_transport::seek(
                                         &soap_client,
                                         &av_control_url,
                                         pos.trim(),
@@ -445,13 +297,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             }
                             "n" => {
-                                stop_media(&soap_client, &av_control_url).await.ok();
+                                dlna::av_transport::stop(&soap_client, &av_control_url).await.ok();
                                 poll_task.abort();
                                 track_exit = TrackExit::NextTrack;
                                 break 'control;
                             }
                             "q" => {
-                                stop_media(&soap_client, &av_control_url).await.ok();
+                                dlna::av_transport::stop(&soap_client, &av_control_url).await.ok();
                                 poll_task.abort();
                                 track_exit = TrackExit::Quit;
                                 break 'control;
@@ -476,53 +328,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     println!("\nDevice went offline. Attempting rediscovery...");
                                     poll_task.abort();
 
-                                    let new_loc = if let Some(ref usn) = selected_usn {
-                                        rediscover_by_usn(
-                                            &config.multicast_address,
-                                            config.multicast_port,
-                                            usn,
-                                        )
-                                        .await
-                                        .and_then(|d| d.get("LOCATION").cloned())
-                                    } else {
-                                        None
-                                    };
-
-                                    match new_loc {
-                                        Some(loc) => {
-                                            match fetch_device_description_quiet(&loc).await {
-                                                Ok(desc) => {
-                                                    let base = extract_base_url(&loc);
-                                                    av_control_url = find_control_url(
-                                                        &desc,
-                                                        "AVTransport",
-                                                        &base,
-                                                    )
-                                                    .unwrap_or_else(|| {
-                                                        format!(
-                                                            "{}/upnp/control/AVTransport1",
-                                                            base
-                                                        )
-                                                    });
-                                                    cm_control_url = find_control_url(
-                                                        &desc,
-                                                        "ConnectionManager",
-                                                        &base,
-                                                    )
-                                                    .unwrap_or_else(|| {
-                                                        format!(
-                                                            "{}/upnp/control/ConnectionManager1",
-                                                            base
-                                                        )
-                                                    });
-                                                    println!("Device rediscovered. Restarting track...");
-                                                    track_exit = TrackExit::NextTrack;
-                                                }
-                                                Err(e) => {
-                                                    eprintln!("Rediscovery failed: {}", e);
-                                                    track_exit = TrackExit::Quit;
-                                                }
-                                            }
+                                    match reconnect_device(
+                                        &config.multicast_address,
+                                        config.multicast_port,
+                                        &selected_usn,
+                                    )
+                                    .await
+                                    {
+                                        Some((av, cm)) => {
+                                            av_control_url = av;
+                                            cm_control_url = cm;
+                                            println!("Device rediscovered. Restarting track...");
+                                            track_exit = TrackExit::NextTrack;
                                         }
                                         None => {
                                             eprintln!("Device not found after rediscovery.");
