@@ -6,8 +6,7 @@ use tokio::time::{timeout, Duration, Instant};
 fn header_value<'a>(response: &'a str, name: &str) -> Option<&'a str> {
     let prefix_len = name.len() + 1; // name + ':'
     response.lines().find_map(|line| {
-        if line.len() > prefix_len
-            && line[..prefix_len].eq_ignore_ascii_case(&format!("{}:", name))
+        if line.len() > prefix_len && line[..prefix_len].eq_ignore_ascii_case(&format!("{}:", name))
         {
             Some(line[prefix_len..].trim())
         } else {
@@ -61,16 +60,9 @@ pub async fn discover_ssdp(
 
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
     socket.set_multicast_ttl_v4(4)?;
-    println!(
-        "UDP socket created on local port: {:?}",
-        socket.local_addr()
-    );
-
-    println!("Sending SSDP request to {multicast_address}...");
     socket
         .send_to(m_search.as_bytes(), &multicast_address)
         .await?;
-    println!("SSDP request sent successfully!");
 
     let mut devices: Vec<HashMap<String, String>> = Vec::new();
     let mut buf = [0u8; 4096];
@@ -87,7 +79,6 @@ pub async fn discover_ssdp(
                         .iter()
                         .any(|d| d.get("USN") == device_info.get("USN"))
                     {
-                        println!("New device found: {:?}", device_info);
                         devices.push(device_info);
                     }
                 }

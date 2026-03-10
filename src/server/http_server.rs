@@ -25,7 +25,7 @@ pub async fn start_http_server(port: u16, config: Config) {
         }
     });
 
-    let server = Server::bind(&addr).serve(make_svc);
+    let server = Server::bind(&addr).tcp_nodelay(true).serve(make_svc);
 
     if let Err(e) = server.await {
         println!("HTTP server error: {}", e);

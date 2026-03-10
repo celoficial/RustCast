@@ -125,19 +125,14 @@ pub async fn stream_media(
         return Err(format!("The file '{}' was not found.", media_file.path).into());
     }
 
-    println!("Starting streaming of: {}", media_file.path);
-
-    // URL that the TV will use to fetch the media — use just the filename
+    // URL the TV uses to fetch the media; relative_path preserves subfolder structure
     let media_url = format!(
         "http://{}:{}/media/{}",
-        config.http_address, config.http_port, media_file.name
+        config.http_address, config.http_port, media_file.relative_path
     );
 
-    // PrepareForConnection is optional in DLNA; many renderers don't support it.
-    // Log failures but don't abort streaming.
-    if let Err(e) = prepare_connection(client, cm_control_url).await {
-        eprintln!("PrepareForConnection skipped (not supported by device): {}", e);
-    }
+    // PrepareForConnection is optional in DLNA — silently ignore failures
+    let _ = prepare_connection(client, cm_control_url).await;
 
     let mime_type = get_mime_type(&media_file.path);
 
@@ -184,8 +179,6 @@ pub async fn stream_media(
         metadata_escaped
     );
 
-    println!("Sending SetAVTransportURI command to {}", av_control_url);
-
     let request_set_uri = hyper::Request::builder()
         .method(hyper::Method::POST)
         .uri(av_control_url)
@@ -210,9 +203,7 @@ pub async fn stream_media(
         .into());
     }
 
-    println!("Media configured successfully! Sending Play command...");
     send_play(client, av_control_url).await?;
-    println!("Playback started successfully!");
 
     Ok(())
 }
