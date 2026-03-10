@@ -188,10 +188,8 @@ async fn handle_media_file_request(
         Ok(f) => f,
         Err(_) => return respond_internal_server_error("Error opening file"),
     };
-    if start > 0 {
-        if file.seek(SeekFrom::Start(start)).await.is_err() {
-            return respond_internal_server_error("Error seeking file");
-        }
+    if start > 0 && file.seek(SeekFrom::Start(start)).await.is_err() {
+        return respond_internal_server_error("Error seeking file");
     }
 
     // Bounded channel between disk reader and network sender.
