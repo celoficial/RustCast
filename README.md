@@ -2,18 +2,18 @@
 
 [![CI](https://github.com/celoficial/RustCast/actions/workflows/ci.yml/badge.svg)](https://github.com/celoficial/RustCast/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Rust](https://img.shields.io/badge/Rust-2021-orange)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-2024-orange)](https://www.rust-lang.org/)
 [![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen)](.github/CONTRIBUTING.md)
 
 RustCast is a lightweight **DLNA media server** written in **Rust**. Run it on your computer and stream local media files to any compatible device on your network — Smart TVs, speakers, and UPnP/DLNA renderers.
 
 ## Quick links
 
-| I want to… | Go to |
-|---|---|
-| Download and run RustCast | [Getting Started](docs/GETTING_STARTED.md) |
-| Build from source / contribute | [Development Guide](docs/DEVELOPMENT.md) |
-| Latest release + binaries | [Releases](https://github.com/celoficial/RustCast/releases/latest) |
+| I want to…                     | Go to                                                              |
+| ------------------------------ | ------------------------------------------------------------------ |
+| Download and run RustCast      | [Getting Started](docs/GETTING_STARTED.md)                         |
+| Build from source / contribute | [Development Guide](docs/DEVELOPMENT.md)                           |
+| Latest release + binaries      | [Releases](https://github.com/celoficial/RustCast/releases/latest) |
 
 ## Features
 
