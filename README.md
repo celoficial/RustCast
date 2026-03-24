@@ -17,15 +17,33 @@ RustCast is a lightweight **DLNA media server** written in **Rust**. Run it on y
 
 ## Features
 
-- **Automatic device discovery** — lists renderers by friendly name
+- **Terminal UI** — unified screen showing devices and media side-by-side at all times
+- **Automatic device discovery** — background SSDP scan with live spinner; press `R` to rescan
 - **LAN advertisement** via SSDP NOTIFY — your TV sees RustCast without manual setup
-- **Playlist support** — select multiple files at once (`1`, `1,3`, `2-4`, `all`)
+- **Playlist support** — select multiple files with `Space`/`A`, play with `Enter`
 - **Playback controls** — pause, resume, stop, seek, skip, auto-advance
 - **Subtitle auto-detection** — place a `.srt` alongside the video, same name
 - **Range requests** — seek-friendly 206 Partial Content streaming
 - **Auto IP detection** — no network configuration required
 
 **Supported formats:** mp4, mkv, avi, mp3
+
+## TUI Controls
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Switch focus between Devices and Media panels |
+| `↑↓` / `jk` | Navigate list |
+| `Enter` (Devices) | Connect to selected device |
+| `Enter` (Media) | Start playlist from selected files |
+| `Space` | Toggle file selection |
+| `A` | Select / deselect all files |
+| `R` | Rescan for devices |
+| `P` | Pause / resume |
+| `N` | Skip to next track |
+| `S` | Stop playback |
+| `F` | Seek to position (`HH:MM:SS`) |
+| `Q` / `Esc` | Quit |
 
 ## Roadmap
 
@@ -38,7 +56,7 @@ RustCast is a lightweight **DLNA media server** written in **Rust**. Run it on y
 - [x] Subtitle support (.srt, auto-detected)
 - [x] Range request support
 - [x] Auto IP detection
-- [ ] Graphical user interface
+- [x] Terminal graphical interface (ratatui)
 
 ## License
 
